@@ -22,6 +22,7 @@ const INSTRUCTION_DISCRIMINATORS = {
   initializeUserProfile: Buffer.from(sha256.digest("global:initialize_user_profile")).slice(0, 8),
   createTextPost: Buffer.from(sha256.digest("global:create_text_post")).slice(0, 8),
   createImagePost: Buffer.from(sha256.digest("global:create_image_post")).slice(0, 8),
+  linkCnftToPost: Buffer.from(sha256.digest("global:link_cnft_to_post")).slice(0, 8),
   followUser: Buffer.from(sha256.digest("global:follow_user")).slice(0, 8),
   likePost: Buffer.from(sha256.digest("global:like_post")).slice(0, 8),
   updateUserProfile: Buffer.from(sha256.digest("global:update_user_profile")).slice(0, 8),
@@ -40,8 +41,7 @@ export interface CustomPost {
   author: PublicKey;
   content: string;
   postType: number; // 0 = text, 1 = image
-  imageChunks: PublicKey[];
-  totalImageChunks: number;
+  imageNft: PublicKey | null; // cNFT address for image posts
   replyTo: PublicKey | null;
   timestamp: number;
   likes: number;
@@ -144,12 +144,14 @@ export class SolcialsCustomProgramService {
 
   // Clear cache manually if needed (after posting, following, etc.)
   public clearAccountsCache(): void {
-    console.log('🧹 Clearing accounts cache');
+    console.log('🧹 Clearing accounts cache - forcing fresh fetch');
     this.allAccountsCache = {
       data: null,
       timestamp: 0,
       isLoading: false
     };
+    // Also clear the replies cache
+    this.repliesCache.clear();
   }
 
   // Add delay between requests to prevent rate limiting
@@ -442,8 +444,14 @@ export class SolcialsCustomProgramService {
     const [followerProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
     const [followingProfilePDA] = this.getUserProfilePDA(targetUser);
 
-    // Ensure both profiles exist
+    // Ensure your own profile exists
     await this.ensureUserProfile(wallet);
+    
+    // Check if the target user has a profile
+    const targetUserProfile = await this.connection.getAccountInfo(followingProfilePDA);
+    if (!targetUserProfile) {
+      throw new Error('Cannot follow this user: they haven\'t set up their profile yet. They need to create a post or update their profile first.');
+    }
 
     const instruction = new TransactionInstruction({
       keys: [
@@ -554,12 +562,11 @@ export class SolcialsCustomProgramService {
           
           let offset = 8; // Skip discriminator
           
-          // Parse Post struct fields:
+          // Parse Post struct fields (UPDATED for new contract structure):
           // pub author: Pubkey (32 bytes)
           // pub content: String (4 bytes length + content)
           // pub post_type: u8 (1 byte)
-          // pub image_chunks: Vec<Pubkey> (4 bytes length + chunks)
-          // pub total_image_chunks: u8 (1 byte)
+          // pub image_nft: Option<Pubkey> (1 byte discriminator + optional 32 bytes)
           // pub reply_to: Option<Pubkey> (1 byte discriminator + optional 32 bytes)
           // pub timestamp: i64 (8 bytes)
           // pub likes: u64 (8 bytes)
@@ -589,18 +596,18 @@ export class SolcialsCustomProgramService {
           const postType = data.readUInt8(offset);
           offset += 1;
 
-          // Image chunks vector length (4 bytes)
-          if (data.length < offset + 4) continue;
-          const imageChunksLength = data.readUInt32LE(offset);
-          offset += 4;
-
-          // Skip image chunks (32 bytes each)
-          offset += imageChunksLength * 32;
-
-          // Total image chunks (1 byte)
+          // Image NFT option (1 byte discriminator + optional 32 bytes)
           if (data.length < offset + 1) continue;
-          const totalImageChunks = data.readUInt8(offset);
+          const hasImageNft = data.readUInt8(offset);
           offset += 1;
+          
+          let imageNft: PublicKey | undefined = undefined;
+          if (hasImageNft === 1) {
+            if (data.length < offset + 32) continue;
+            const imageNftBytes = data.slice(offset, offset + 32);
+            imageNft = new PublicKey(imageNftBytes);
+            offset += 32;
+          }
 
           // Reply to option (1 byte discriminator + optional 32 bytes)
           if (data.length < offset + 1) continue;
@@ -642,21 +649,34 @@ export class SolcialsCustomProgramService {
             // Keep defaults (0, 0, 0) and don't increment offset if reading failed
           }
 
+          // Validate timestamp before creating post
+          const timestampMs = Number(timestamp) * 1000; // Convert to milliseconds
+          const postDate = new Date(timestampMs);
+          
+          // Skip posts with invalid dates or years > 3000
+          if (isNaN(postDate.getTime()) || postDate.getFullYear() > 3000 || postDate.getFullYear() < 2020) {
+            const timestampInfo = isNaN(postDate.getTime()) 
+              ? `invalid (${timestamp})` 
+              : postDate.toISOString();
+            console.warn(`⚠️ Skipping post ${account.pubkey.toString()} with invalid timestamp: ${timestampInfo}`);
+            continue;
+          }
+
           const post: SocialPost = {
             id: account.pubkey.toString(),
             author,
             content,
-            timestamp: Number(timestamp) * 1000, // Convert to milliseconds
+            timestamp: timestampMs,
             signature: account.pubkey.toString(),
             likes,
             reposts,
             replies,
             // Include replyTo if present
             ...(replyTo ? { replyTo } : {}),
-            // Add image data if it's an image post
-            ...(postType === 1 && totalImageChunks > 0 ? {
-              imageHash: `${account.pubkey.toString()}_chunks`,
-              imageUrl: '', // Would need to reconstruct from chunks
+            // Add image data if it's an image post with cNFT
+            ...(postType === 1 && imageNft ? {
+              imageUrl: `nft:${imageNft.toString()}`, // Special format to indicate cNFT
+              imageHash: imageNft.toString(),
               imageSize: 0
             } : {})
           };
@@ -1924,5 +1944,130 @@ export class SolcialsCustomProgramService {
     } else {
       throw new Error(`Account is owned by ${accountInfo.owner.toString()}, not our program. Cannot close.`);
     }
+  }
+
+  // Create an image post with cNFT reference
+  async createImagePostWithCNft(
+    wallet: WalletAdapter, 
+    content: string, 
+    cnftAddress: PublicKey,
+    replyTo?: PublicKey
+  ): Promise<string> {
+    if (!wallet.publicKey || !wallet.signTransaction || !wallet.connected) {
+      throw new Error('Wallet not connected');
+    }
+
+    if (content.length > 280) {
+      throw new Error('Content too long (max 280 characters)');
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
+    const [postPDA] = this.getPostPDA(wallet.publicKey, timestamp);
+    const [userProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
+
+    // Ensure user profile exists
+    await this.ensureUserProfile(wallet);
+
+    // Create instruction data for image post with cNFT
+    const instructionData = Buffer.alloc(8 + content.length + 4 + 8 + 32 + 33);
+    let offset = 0;
+    
+    // Instruction discriminator for create_image_post
+    INSTRUCTION_DISCRIMINATORS.createImagePost.copy(instructionData, offset);
+    offset += 8;
+    
+    // String serialization: length (4 bytes) + content
+    instructionData.writeUInt32LE(content.length, offset);
+    offset += 4;
+    Buffer.from(content, 'utf8').copy(instructionData, offset);
+    offset += content.length;
+    
+    // Timestamp
+    const timestampBuffer = Buffer.alloc(8);
+    timestampBuffer.writeBigInt64LE(BigInt(timestamp), 0);
+    timestampBuffer.copy(instructionData, offset);
+    offset += 8;
+    
+    // Optional reply_to (1 byte flag + 32 bytes if present)
+    if (replyTo) {
+      instructionData.writeUInt8(1, offset);
+      offset += 1;
+      replyTo.toBuffer().copy(instructionData, offset);
+    } else {
+      instructionData.writeUInt8(0, offset);
+    }
+
+    const instruction = new TransactionInstruction({
+      keys: [
+        { pubkey: postPDA, isSigner: false, isWritable: true },
+        { pubkey: userProfilePDA, isSigner: false, isWritable: true },
+        { pubkey: PLATFORM_TREASURY, isSigner: false, isWritable: true },
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      programId: this.programId,
+      data: instructionData,
+    });
+
+    const transaction = new Transaction().add(instruction);
+    const { blockhash } = await this.connection.getLatestBlockhash();
+    transaction.recentBlockhash = blockhash;
+    transaction.feePayer = wallet.publicKey;
+
+    const signedTransaction = await wallet.signTransaction(transaction);
+    const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
+
+    await this.connection.confirmTransaction(signature, 'confirmed');
+    
+    console.log('✅ Image post created:', signature);
+    
+    // Now link the cNFT to the post
+    await this.linkCNftToPost(wallet, postPDA, cnftAddress);
+    
+    // Clear any cached data to reflect the new post
+    this.clearAccountsCache();
+    
+    return signature;
+  }
+
+  // Link cNFT to existing post
+  async linkCNftToPost(
+    wallet: WalletAdapter,
+    postPubkey: PublicKey,
+    cnftAddress: PublicKey
+  ): Promise<string> {
+    if (!wallet.publicKey || !wallet.signTransaction || !wallet.connected) {
+      throw new Error('Wallet not connected');
+    }
+
+    // Create instruction data
+    const instructionData = Buffer.alloc(8 + 32);
+    let offset = 0;
+    
+    // Instruction discriminator for link_cnft_to_post
+    INSTRUCTION_DISCRIMINATORS.linkCnftToPost.copy(instructionData, offset);
+    offset += 8;
+    
+    // cNFT address
+    cnftAddress.toBuffer().copy(instructionData, offset);
+
+    const instruction = new TransactionInstruction({
+      keys: [
+        { pubkey: postPubkey, isSigner: false, isWritable: true },
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
+      ],
+      programId: this.programId,
+      data: instructionData,
+    });
+
+    const transaction = new Transaction().add(instruction);
+    transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
+    transaction.feePayer = wallet.publicKey;
+
+    const signedTransaction = await wallet.signTransaction(transaction);
+    const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
+
+    console.log('✅ cNFT linked to post:', signature);
+    return signature;
   }
 } 

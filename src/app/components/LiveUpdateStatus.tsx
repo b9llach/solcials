@@ -5,50 +5,46 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Bell, BellOff, Wifi, Zap } from 'lucide-react';
+import { Toast } from '../utils/toast';
 
 export default function LiveUpdateStatus() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>('default');
-  const [mounted, setMounted] = useState(false);
+  const [isLive, setIsLive] = useState(false);
 
   const heliusApiKey = process.env.NEXT_PUBLIC_HELIUS;
   const isWebSocketEnabled = !!heliusApiKey;
 
   useEffect(() => {
-    setMounted(true);
-    
+    // Check if notifications are supported and enabled
     if ('Notification' in window) {
-      setNotificationPermission(Notification.permission);
       setNotificationsEnabled(Notification.permission === 'granted');
     }
+
+    // Simulate live status (you could connect to WebSocket here)
+    const interval = setInterval(() => {
+      setIsLive(Math.random() > 0.5);
+    }, 5000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  const handleNotificationToggle = async () => {
+  const requestNotificationPermission = async () => {
     if (!('Notification' in window)) {
-      alert('This browser does not support notifications');
+      Toast.error('This browser does not support notifications');
       return;
     }
 
-    if (notificationPermission === 'denied') {
-      alert('Notifications are blocked. Please enable them in your browser settings.');
-      return;
-    }
-
-    if (notificationPermission === 'default' || notificationPermission === 'granted') {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-      setNotificationsEnabled(permission === 'granted');
-      
-      if (permission === 'granted') {
-        new Notification('Solcials', {
-          body: '🎉 Live notifications enabled! You\'ll be notified of new posts.',
-          icon: '/favicon.ico'
-        });
-      }
+    const permission = await Notification.requestPermission();
+    
+    if (permission === 'granted') {
+      setNotificationsEnabled(true);
+      Toast.success('Notifications enabled!');
+    } else if (permission === 'denied') {
+      Toast.warning('Notifications are blocked. Please enable them in your browser settings.');
     }
   };
 
-  if (!mounted) {
+  if (!isLive) {
     return null; // Avoid hydration mismatch
   }
 
@@ -92,7 +88,7 @@ export default function LiveUpdateStatus() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleNotificationToggle}
+            onClick={requestNotificationPermission}
             className="h-8 px-2"
           >
             {notificationsEnabled ? (

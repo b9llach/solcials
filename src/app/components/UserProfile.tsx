@@ -12,14 +12,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
-import { ExternalLink, Clock, User, UserCheck, MessageSquare } from 'lucide-react';
+import { ExternalLink, Clock, User, UserCheck, MessageSquare, Users, UserPlus, Copy, Check } from 'lucide-react';
+import { Toast } from '../utils/toast';
 
 interface UserProfileProps {
   userAddress: string;
   onClose: () => void;
+  onFollowChange?: (isFollowing: boolean) => void;
 }
 
-export default function UserProfile({ userAddress, onClose }: UserProfileProps) {
+export default function UserProfile({ userAddress, onClose, onFollowChange }: UserProfileProps) {
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFollowing, setIsFollowing] = useState(false);
@@ -65,23 +67,30 @@ export default function UserProfile({ userAddress, onClose }: UserProfileProps) 
 
   const handleFollow = async () => {
     if (!wallet.connected || !wallet.publicKey) {
-      alert('Please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
-    if (isRequesting) {
-      return;
-    }
+    if (isRequesting) return;
 
     try {
       setIsRequesting(true);
       const socialService = new SolcialsCustomProgramService(connection);
-      await socialService.followUser(wallet, userPublicKey);
-      setIsFollowing(true);
-      alert('Successfully followed user!');
+      
+      if (isFollowing) {
+        await socialService.unfollowUser(wallet, userPublicKey);
+        setIsFollowing(false);
+        if (onFollowChange) onFollowChange(false);
+      } else {
+        await socialService.followUser(wallet, userPublicKey);
+        setIsFollowing(true);
+        if (onFollowChange) onFollowChange(true);
+      }
+      
+      Toast.success('Successfully followed user!');
     } catch (error) {
-      console.error('Error following user:', error);
-      alert('Failed to follow user. Please try again.');
+      console.error('Error following/unfollowing user:', error);
+      Toast.error('Failed to follow user. Please try again.');
     } finally {
       setIsRequesting(false);
     }

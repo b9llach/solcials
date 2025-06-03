@@ -138,7 +138,7 @@ export default function Home() {
               <NotebookPenIcon className="h-6 w-6 sm:h-8 sm:w-8 font-bold stroke-[2.5] sm:stroke-[3]" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] sm:max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-[98vw] sm:max-w-2xl max-h-[95vh] overflow-y-auto p-0 gap-0">
             <DialogTitle className="sr-only">create new post</DialogTitle>
             <CreatePost onPostCreated={handlePostCreated} />
           </DialogContent>

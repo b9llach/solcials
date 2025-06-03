@@ -13,7 +13,9 @@ import ReplyDialog from '../../components/ReplyDialog';
 import { ArrowLeft, Clock, ExternalLink, ImageIcon, UserPlus, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import { PublicKey } from '@solana/web3.js';
-import Image from 'next/image';
+import NFTImage from '../../components/NFTImage';
+import ImageModal from '../../components/ImageModal';
+import { Toast } from '../../utils/toast';
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -29,6 +31,12 @@ export default function PostDetailPage() {
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [replies, setReplies] = useState<SocialPost[]>([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
+  
+  // Image modal state
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState('');
+  const [selectedImageAlt, setSelectedImageAlt] = useState('');
+  const [selectedImageShowMetadata, setSelectedImageShowMetadata] = useState(false);
   
   // Cache for user profiles
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
@@ -185,12 +193,12 @@ export default function PostDetailPage() {
 
   const handleFollow = async (targetPublicKey: PublicKey) => {
     if (!wallet.connected || !wallet.publicKey) {
-      alert('Please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
     if (isRequesting) {
-      alert('Please wait for current request to complete');
+      Toast.warning('Please wait for current request to complete');
       return;
     }
 
@@ -200,10 +208,17 @@ export default function PostDetailPage() {
       await socialService.followUser(wallet, targetPublicKey);
       
       setFollowing(prev => [...prev, targetPublicKey]);
-      alert('Successfully followed user!');
+      Toast.success('Successfully followed user!');
     } catch (error) {
       console.error('Error following user:', error);
-      alert('Failed to follow user. Please try again.');
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      if (errorMessage.includes('haven\'t set up their profile')) {
+        Toast.warning('This user hasn\'t set up their profile yet. They need to create a post or update their profile first.');
+      } else {
+        Toast.error('Failed to follow user. Please try again.');
+      }
     } finally {
       setIsRequesting(false);
     }
@@ -211,12 +226,12 @@ export default function PostDetailPage() {
 
   const handleUnfollow = async (targetPublicKey: PublicKey) => {
     if (!wallet.connected || !wallet.publicKey) {
-      alert('Please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
     if (isRequesting) {
-      alert('Please wait for current request to complete');
+      Toast.warning('Please wait for current request to complete');
       return;
     }
 
@@ -226,10 +241,10 @@ export default function PostDetailPage() {
       await socialService.unfollowUser(wallet, targetPublicKey);
       
       setFollowing(prev => prev.filter(addr => !addr.equals(targetPublicKey)));
-      alert('Successfully unfollowed user!');
+      Toast.success('Successfully unfollowed user!');
     } catch (error) {
       console.error('Error unfollowing user:', error);
-      alert('Failed to unfollow user. Please try again.');
+      Toast.error('Failed to unfollow user. Please try again.');
     } finally {
       setIsRequesting(false);
     }
@@ -251,12 +266,12 @@ export default function PostDetailPage() {
     if (!post) return;
     
     if (!wallet.connected || !wallet.publicKey) {
-      alert('Please connect your wallet to like posts');
+      Toast.warning('Please connect your wallet to like posts');
       return;
     }
 
     if (isRequesting) {
-      alert('Please wait for current request to complete');
+      Toast.warning('Please wait for current request to complete');
       return;
     }
 
@@ -273,15 +288,15 @@ export default function PostDetailPage() {
           newSet.delete(post.signature);
           return newSet;
         });
-        alert('Post unliked!');
+        Toast.success('Post unliked!');
       } else {
         await solcialsProgram.likePost(wallet, new PublicKey(post.id));
         setLikedPosts(prev => new Set(prev).add(post.signature));
-        alert('Post liked!');
+        Toast.success('Post liked!');
       }
     } catch (error) {
       console.error('Error liking/unliking post:', error);
-      alert(`Failed to ${isLiked ? 'unlike' : 'like'} post. Please try again.`);
+      Toast.error(`Failed to ${isLiked ? 'unlike' : 'like'} post. Please try again.`);
     } finally {
       setIsRequesting(false);
     }
@@ -442,9 +457,20 @@ export default function PostDetailPage() {
             {/* Post Image */}
             {hasImage && (
               <div className="mb-3 sm:mb-4">
-                <div className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10">
-                  <Image src={post.imageUrl || ''} alt="Post Image" width={500} height={500} />
-                </div>
+                <NFTImage
+                  imageUrl={post.imageUrl!}
+                  alt="Post image"
+                  aspectRatio="wide"
+                  height={400}
+                  onClick={() => {
+                    setSelectedImageUrl(post.imageUrl!);
+                    setSelectedImageAlt("Post image");
+                    setSelectedImageShowMetadata(post.imageUrl?.startsWith('nft:') || false);
+                    setImageModalOpen(true);
+                  }}
+                  showMetadata={post.imageUrl?.startsWith('nft:')}
+                  className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10"
+                />
                 {post.imageSize && post.imageSize > 0 && (
                   <p className="text-xs text-muted-foreground mt-2 flex items-center">
                     <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
@@ -668,6 +694,15 @@ export default function PostDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={imageModalOpen}
+        onClose={() => setImageModalOpen(false)}
+        imageUrl={selectedImageUrl}
+        alt={selectedImageAlt}
+        showMetadata={selectedImageShowMetadata}
+      />
 
       {/* Share Dialog - exactly like PostList */}
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>

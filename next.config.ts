@@ -24,6 +24,9 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  images: {
+    domains: ['gateway.lighthouse.storage'],
+  },
 };
 
 export default nextConfig;

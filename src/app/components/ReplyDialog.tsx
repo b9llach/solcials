@@ -1,17 +1,21 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey } from '@solana/web3.js';
 import { SolcialsCustomProgramService } from '../utils/solcialsProgram';
-import { useUserProfile } from '../hooks/useUserProfile';
 import { SocialPost } from '../types/social';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { MessageCircle, Send, Loader2, X, Upload, Image as ImageIcon } from 'lucide-react';
+import Image from 'next/image';
+import { getSimplifiedNFTService } from '../utils/simplifiedNftService';
+import { getImageDimensions, formatFileSize } from '../utils/imageUtils';
+import { Toast } from '../utils/toast';
+import { useUserProfile } from '../hooks/useUserProfile';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Send, Loader2, MessageSquare, Image as ImageIcon, X } from 'lucide-react';
-import { PublicKey } from '@solana/web3.js';
 
 interface ReplyDialogProps {
   post: SocialPost;
@@ -29,6 +33,8 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -79,25 +85,37 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
     return profile?.username || null;
   };
 
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select an image file');
+      Toast.error('Please select an image file');
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Image must be smaller than 5MB');
-      return;
-    }
+    // Optional size limit for user experience
+    // if (file.size > 50 * 1024 * 1024) {
+    //   Toast.error('Image must be smaller than 50MB');
+    //   return;
+    // }
 
     setSelectedImage(file);
 
+    // Create preview and get dimensions
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setImagePreview(e.target?.result as string);
+    reader.onload = async (e) => {
+      const preview = e.target?.result as string;
+      setImagePreview(preview);
+      
+      try {
+        const dimensions = await getImageDimensions(file);
+        setImageDimensions(dimensions);
+      } catch (error) {
+        console.warn('Could not get image dimensions:', error);
+        setImageDimensions(null);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -105,23 +123,24 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
   const removeImage = () => {
     setSelectedImage(null);
     setImagePreview(null);
+    setImageDimensions(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!wallet.connected || !wallet.publicKey) {
-      alert('Please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
     if (!content.trim() && !selectedImage) {
-      alert('Please enter some content or select an image');
+      Toast.warning('Please enter some content or select an image');
       return;
     }
 
     if (content.length > 280) {
-      alert('Reply must be 280 characters or less');
+      Toast.error('Reply must be 280 characters or less');
       return;
     }
 
@@ -130,52 +149,68 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
       const customService = new SolcialsCustomProgramService(connection);
       
       if (selectedImage) {
-        // Image reply with platform fee
-        console.log('📸 Creating image reply with Solcials program...');
-        await customService.createImageReply(wallet, content.trim(), post.id);
+        // Image reply with NFT creation
+        setIsUploadingImage(true);
         
-        // TODO: Implement image chunking for replies
-        console.log('⚠️ Image chunking not yet implemented - reply created without image data');
-        
+        try {
+          console.log('🎨 Creating image reply with NFT...');
+          
+          const nftService = getSimplifiedNFTService();
+          const { nftAddress } = await nftService.createImageNFT(
+            {
+              publicKey: wallet.publicKey,
+              signTransaction: wallet.signTransaction,
+              signAllTransactions: wallet.signAllTransactions,
+              connected: wallet.connected
+            },
+            selectedImage,
+            content.trim()
+          );
+          
+          console.log('✅ NFT created for reply:', nftAddress.toString());
+          
+          await customService.createImagePostWithCNft(
+            wallet, 
+            content.trim(), 
+            nftAddress,
+            new PublicKey(post.id)
+          );
+          
+        } catch (error) {
+          console.error('Failed to create image reply with NFT:', error);
+          Toast.error('Failed to create image reply. Please try again.');
+          return;
+        } finally {
+          setIsUploadingImage(false);
+        }
       } else {
         // Text-only reply
-        console.log('📝 Creating text reply with Solcials program...');
-        await customService.createTextReply(wallet, content.trim(), post.id);
+        await customService.createTextPost(wallet, content.trim(), new PublicKey(post.id));
       }
       
-      console.log('✅ Reply created with Solcials program!');
+      console.log('✅ Reply created!');
       
       setContent('');
       removeImage();
+      setIsDialogOpen(false);
       onReplyCreated();
       
-      // Close dialog
-      if (onOpenChange) {
-        onOpenChange(false);
-      } else {
-        setIsDialogOpen(false);
-      }
-      
-      // Success feedback
-      const successMsg = document.createElement('div');
-      successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      successMsg.textContent = selectedImage 
-        ? '🎉✨ Premium image reply created!' 
-        : '🎉💬 Reply created!';
-      
-      document.body.appendChild(successMsg);
-      setTimeout(() => document.body.removeChild(successMsg), 4000);
+      Toast.success(selectedImage 
+        ? 'Image reply created with NFT!' 
+        : 'Reply created!'
+      );
       
     } catch (error) {
       console.error('Error creating reply:', error);
       
       if (error instanceof Error && error.message.includes('User profile')) {
-        alert('Creating your user profile first, then try replying again.');
+        Toast.info('Creating your user profile first, then try replying again.');
       } else {
-        alert('Failed to create reply. Please try again.');
+        Toast.error('Failed to create reply. Please try again.');
       }
     } finally {
       setIsPosting(false);
+      setIsUploadingImage(false);
     }
   };
 
@@ -239,7 +274,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
                   className={`min-h-[100px] resize-none border-0 focus-visible:ring-1 text-base placeholder:text-muted-foreground/60 ${
                     isOverLimit ? 'focus-visible:ring-red-500' : 'focus-visible:ring-primary'
                   }`}
-                  disabled={isPosting}
+                  disabled={isPosting || isUploadingImage}
                 />
 
                 {/* Image Preview */}
@@ -251,7 +286,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
                         type="button"
                         onClick={removeImage}
                         className="absolute top-2 right-2 bg-black/70 hover:bg-black/80 text-white rounded-full p-1.5 transition-colors"
-                        disabled={isPosting}
+                        disabled={isPosting || isUploadingImage}
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -275,7 +310,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
                       size="sm"
                       onClick={() => document.getElementById('reply-image-input')?.click()}
                       className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
-                      disabled={isPosting || selectedImage !== null}
+                      disabled={isPosting || isUploadingImage || selectedImage !== null}
                     >
                       <ImageIcon className="h-4 w-4" />
                     </Button>
@@ -292,7 +327,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
                     
                     <Button
                       type="submit"
-                      disabled={isPosting || (!content.trim() && !selectedImage) || isOverLimit}
+                      disabled={isPosting || isUploadingImage || (!content.trim() && !selectedImage) || isOverLimit}
                       className="min-w-[80px] bg-primary hover:bg-primary/90"
                     >
                       {isPosting ? (
@@ -352,7 +387,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
           size="sm"
           className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2 sm:px-3"
         >
-          <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+          <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
           <span className="text-xs hidden sm:inline">Reply</span>
         </Button>
       </DialogTrigger>

@@ -2,9 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import { PublicKey } from '@solana/web3.js';
 import { SolcialsCustomProgramService } from '../utils/solcialsProgram';
 import { SocialPost } from '../types/social';
-import { PublicKey } from '@solana/web3.js';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,7 +13,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Input } from '@/components/ui/input';
 import ReplyDialog from './ReplyDialog';
 import ThreadContext from './ThreadContext';
-import { ExternalLink, UserPlus, Clock, MessageSquare, Loader2, ImageIcon, Users, Copy, Check } from 'lucide-react';
+import NFTImage from './NFTImage';
+import ImageModal from './ImageModal';
+import { ExternalLink, UserPlus, Clock, MessageSquare, Loader2, Users, Copy, Check } from 'lucide-react';
+import { Toast } from '../utils/toast';
 
 interface PostListProps {
   refreshTrigger: number;
@@ -39,6 +42,12 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
   // Cache for user profiles to avoid repeated fetches
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
   const [loadingProfiles, setLoadingProfiles] = useState<Set<string>>(new Set());
+
+  // Image modal state
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [selectedImageUrl, setSelectedImageUrl] = useState('');
+  const [selectedImageAlt, setSelectedImageAlt] = useState('');
+  const [selectedImageShowMetadata, setSelectedImageShowMetadata] = useState(false);
 
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -128,7 +137,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
       const socialService = new SolcialsCustomProgramService(connection);
       
       // Fetch posts
-      const fetchedPosts = await socialService.getPosts(20);
+      const fetchedPosts = await socialService.getPosts(50);
       setPosts(fetchedPosts);
       
       // Cache posts for future use
@@ -181,12 +190,12 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   const handleFollow = async (targetPublicKey: PublicKey) => {
     if (!wallet.connected || !wallet.publicKey) {
-      alert('Please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
     if (isRequesting) {
-      alert('Please wait for current request to complete');
+      Toast.warning('Please wait for current request to complete');
       return;
     }
 
@@ -197,10 +206,17 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
       
       // Update local following list
       setFollowing(prev => [...prev, targetPublicKey]);
-      alert('Successfully followed user!');
+      Toast.success('Successfully followed user!');
     } catch (error) {
       console.error('Error following user:', error);
-      alert('Failed to follow user. Please try again.');
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      if (errorMessage.includes('haven\'t set up their profile')) {
+        Toast.warning('This user hasn\'t set up their profile yet. They need to create a post or update their profile first.');
+      } else {
+        Toast.error('Failed to follow user. Please try again.');
+      }
     } finally {
       setIsRequesting(false);
     }
@@ -208,12 +224,12 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   const handleUnfollow = async (targetPublicKey: PublicKey) => {
     if (!wallet.connected || !wallet.publicKey) {
-      alert('Please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
     if (isRequesting) {
-      alert('Please wait for current request to complete');
+      Toast.warning('Please wait for current request to complete');
       return;
     }
 
@@ -224,10 +240,10 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
       
       // Update local following list
       setFollowing(prev => prev.filter(addr => !addr.equals(targetPublicKey)));
-      alert('Successfully unfollowed user!');
+      Toast.success('Successfully unfollowed user!');
     } catch (error) {
       console.error('Error unfollowing user:', error);
-      alert('Failed to unfollow user. Please try again.');
+      Toast.error('Failed to unfollow user. Please try again.');
     } finally {
       setIsRequesting(false);
     }
@@ -550,12 +566,12 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
             const handleLike = async () => {
               if (!wallet.connected || !wallet.publicKey) {
-                alert('Please connect your wallet to like posts');
+                Toast.warning('Please connect your wallet to like posts');
                 return;
               }
 
               if (isRequesting) {
-                alert('Please wait for current request to complete');
+                Toast.warning('Please wait for current request to complete');
                 return;
               }
 
@@ -571,16 +587,16 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
                     newSet.delete(post.signature);
                     return newSet;
                   });
-                  alert('Post unliked!');
+                  Toast.success('Post unliked!');
                 } else {
                   // Like the post
                   await solcialsProgram.likePost(wallet, new PublicKey(post.id));
                   setLikedPosts(prev => new Set(prev).add(post.signature));
-                  alert('Post liked!');
+                  Toast.success('Post liked!');
                 }
               } catch (error) {
                 console.error('Error liking/unliking post:', error);
-                alert(`Failed to ${isLiked ? 'unlike' : 'like'} post. Please try again.`);
+                Toast.error(`Failed to ${isLiked ? 'unlike' : 'like'} post. Please try again.`);
               } finally {
                 setIsRequesting(false);
               }
@@ -671,20 +687,19 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
                   {/* Post Image */}
                   {hasImage && (
                     <div className="mb-3 sm:mb-4">
-                      <div className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10">
-                        <img 
-                          src={post.imageUrl} 
-                          alt="Post image" 
-                          className="w-full max-h-60 sm:max-h-96 object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
-                          onClick={() => window.open(post.imageUrl!, '_blank')}
-                        />
-                      </div>
-                      {post.imageSize && post.imageSize > 0 && (
-                        <p className="text-xs text-muted-foreground mt-2 flex items-center">
-                          <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
-                          <span className="truncate">{(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS</span>
-                        </p>
-                      )}
+                      <NFTImage
+                        imageUrl={post.imageUrl!}
+                        alt="Post image"
+                        aspectRatio="wide"
+                        height={300}
+                        onClick={() => {
+                          setSelectedImageUrl(post.imageUrl!);
+                          setSelectedImageAlt("Post image");
+                          setSelectedImageShowMetadata(post.imageUrl?.startsWith('nft:') || false);
+                          setImageModalOpen(true);
+                        }}
+                        showMetadata={post.imageUrl?.startsWith('nft:')}
+                      />
                     </div>
                   )}
                   
@@ -907,6 +922,15 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
           )}
         </div>
       </ScrollArea>
+
+      {/* Image Modal */}
+      <ImageModal
+        isOpen={imageModalOpen}
+        onClose={() => setImageModalOpen(false)}
+        imageUrl={selectedImageUrl}
+        alt={selectedImageAlt}
+        showMetadata={selectedImageShowMetadata}
+      />
 
       {/* Share Dialog */}
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>

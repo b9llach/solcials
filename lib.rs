@@ -37,8 +37,7 @@ pub mod social {
         post.author = ctx.accounts.author.key();
         post.content = content;
         post.post_type = 0; // 0 = text post
-        post.image_chunks = Vec::new();
-        post.total_image_chunks = 0;
+        post.image_nft = None;
         post.reply_to = reply_to;
         post.timestamp = timestamp; // Use provided timestamp
         post.likes = 0;
@@ -53,7 +52,7 @@ pub mod social {
         Ok(())
     }
 
-    // Create an image post (premium with 10% platform fee)
+    // Create an image post with cNFT reference (premium with 10% platform fee)
     pub fn create_image_post(
         ctx: Context<CreateImagePost>,
         content: String,
@@ -79,8 +78,7 @@ pub mod social {
         post.author = ctx.accounts.author.key();
         post.content = content;
         post.post_type = 1; // 1 = image post
-        post.image_chunks = Vec::new(); // Will be populated when chunks are added
-        post.total_image_chunks = 0;
+        post.image_nft = None; // Will be set when NFT is linked
         post.reply_to = reply_to;
         post.timestamp = timestamp; // Use provided timestamp
         post.likes = 0;
@@ -95,31 +93,20 @@ pub mod social {
         Ok(())
     }
 
-    // Add image chunk to existing image post
-    pub fn add_image_chunk(
-        ctx: Context<AddImageChunk>,
-        chunk_data: Vec<u8>,
-        chunk_index: u8,
-        total_chunks: u8,
+    // Link cNFT to existing image post
+    pub fn link_cnft_to_post(
+        ctx: Context<LinkCNftToPost>,
+        cnft_address: Pubkey,
     ) -> Result<()> {
-        let chunk = &mut ctx.accounts.image_chunk;
         let post = &mut ctx.accounts.post;
-
-        // Validate chunk size (max 9KB to stay under 10KB account limit)
-        require!(chunk_data.len() <= 9216, SocialError::ChunkTooLarge);
-
-        let post_key = post.key();
-        chunk.post = post_key;
-        chunk.chunk_index = chunk_index;
-        chunk.total_chunks = total_chunks;
-        chunk.data = chunk_data;
-        chunk.bump = ctx.bumps.image_chunk;
-
-        // Update post with chunk reference
-        post.image_chunks.push(ctx.accounts.image_chunk.key());
-        post.total_image_chunks = total_chunks;
-
-        msg!("Image chunk {} of {} added to post", chunk_index + 1, total_chunks);
+        
+        // Verify this is an image post
+        require!(post.post_type == 1, SocialError::NotImagePost);
+        
+        // Link the cNFT
+        post.image_nft = Some(cnft_address);
+        
+        msg!("cNFT {} linked to post {}", cnft_address, post.key());
         Ok(())
     }
 
@@ -257,22 +244,12 @@ pub struct Post {
     pub author: Pubkey,
     pub content: String,
     pub post_type: u8, // 0 = text, 1 = image
-    pub image_chunks: Vec<Pubkey>, // References to image chunk accounts
-    pub total_image_chunks: u8,
+    pub image_nft: Option<Pubkey>, // cNFT address for image posts
     pub reply_to: Option<Pubkey>,
     pub timestamp: i64,
     pub likes: u64,
     pub reposts: u64,
     pub replies: u64,
-    pub bump: u8,
-}
-
-#[account]
-pub struct ImageChunk {
-    pub post: Pubkey, // Reference to parent post
-    pub chunk_index: u8,
-    pub total_chunks: u8,
-    pub data: Vec<u8>, // Image data chunk (max 9KB)
     pub bump: u8,
 }
 
@@ -385,26 +362,6 @@ pub struct CreateImagePost<'info> {
     /// CHECK: Platform treasury account for collecting fees
     #[account(mut)]
     pub platform_treasury: AccountInfo<'info>,
-
-    #[account(mut)]
-    pub author: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
-
-#[derive(Accounts)]
-#[instruction(chunk_data: Vec<u8>, chunk_index: u8)]
-pub struct AddImageChunk<'info> {
-    #[account(
-        init,
-        payer = author,
-        space = 8 + 32 + 1 + 1 + 4 + 9216 + 1, // Discriminator + post + chunk_index + total_chunks + data_len + data + bump
-        seeds = [b"chunk", post.key().as_ref(), &chunk_index.to_le_bytes()],
-        bump
-    )]
-    pub image_chunk: Account<'info, ImageChunk>,
-
-    #[account(mut)]
-    pub post: Account<'info, Post>,
 
     #[account(mut)]
     pub author: Signer<'info>,
@@ -537,6 +494,15 @@ pub struct UpdateUserProfile<'info> {
     pub user: Signer<'info>,
 }
 
+#[derive(Accounts)]
+pub struct LinkCNftToPost<'info> {
+    #[account(mut)]
+    pub post: Account<'info, Post>,
+    
+    #[account(mut)]
+    pub author: Signer<'info>,
+}
+
 // Custom Errors
 #[error_code]
 pub enum SocialError {
@@ -564,4 +530,6 @@ pub enum SocialError {
     TooManyImages,
     #[msg("Chunk size cannot exceed 9KB")]
     ChunkTooLarge,
+    #[msg("Not an image post")]
+    NotImagePost,
 }

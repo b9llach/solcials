@@ -10,6 +10,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Send, Loader2, MessageSquarePlus, Image as ImageIcon, MapPin, Smile, X, Upload } from 'lucide-react';
 import Image from 'next/image';
+import { getSimplifiedNFTService } from '../utils/simplifiedNftService';
+import { getLighthouseService } from '../utils/lighthouseService';
+import { getImageDimensions, formatFileSize } from '../utils/imageUtils';
+import { Toast } from '../utils/toast';
 
 interface CreatePostProps {
   onPostCreated: () => void;
@@ -21,8 +25,11 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
   const [mounted, setMounted] = useState(false);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number; aspectRatio: number } | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [postCost, setPostCost] = useState<{ totalCost: number; breakdown: string } | null>(null);
+  const [lighthouseBalance, setLighthouseBalance] = useState<{ dataLimit: string; dataUsed: string }>({ dataLimit: '0', dataUsed: '0' });
+  const [loadingLighthouse, setLoadingLighthouse] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const { connection } = useConnection();
@@ -31,43 +38,106 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
 
   useEffect(() => {
     setMounted(true);
+    loadLighthouseInfo();
   }, []);
+
+  // Load Lighthouse storage information
+  const loadLighthouseInfo = async () => {
+    if (!mounted) return;
+    
+    try {
+      setLoadingLighthouse(true);
+      const lighthouseService = getLighthouseService();
+      
+      // Test connection first
+      const connectionTest = await lighthouseService.testConnection();
+      console.log('🔍 Lighthouse connection test:', connectionTest.message);
+      
+      if (!connectionTest.isValid) {
+        console.warn('⚠️ Lighthouse API key issue:', connectionTest.message);
+        setLighthouseBalance({ dataLimit: 'API Key Error', dataUsed: connectionTest.message });
+        return;
+      }
+      
+      const balance = await lighthouseService.getBalance();
+      setLighthouseBalance(balance);
+    } catch (error) {
+      console.warn('Could not load Lighthouse info:', error);
+      setLighthouseBalance({ 
+        dataLimit: 'Error', 
+        dataUsed: error instanceof Error ? error.message : 'Unknown error' 
+      });
+    } finally {
+      setLoadingLighthouse(false);
+    }
+  };
 
   // Calculate costs when image changes
   useEffect(() => {
     const calculateCosts = async () => {
       if (!mounted) return;
       
-      const customService = new SolcialsCustomProgramService(connection);
-      const costs = await customService.calculatePostCosts(!!selectedImage, selectedImage?.size);
-      setPostCost(costs);
+      let totalCost = 0.00036; // Base text post cost
+      let breakdown = 'text post creation';
+      
+      if (selectedImage) {
+        totalCost = 0.001; // NFT creation cost
+        breakdown = 'NFT + post creation';
+        
+        // Add Lighthouse cost estimate
+        try {
+          const lighthouseService = getLighthouseService();
+          const { estimatedCost } = lighthouseService.getUploadCostEstimate(selectedImage.size);
+          breakdown += ` + ${estimatedCost} storage`;
+        } catch (error) {
+          console.warn('Could not get Lighthouse cost:', error);
+          breakdown += ' + IPFS/Filecoin storage';
+        }
+      }
+      
+      setPostCost({
+        totalCost: totalCost * 1e9,
+        breakdown
+      });
     };
 
     calculateCosts();
-  }, [selectedImage, connection, mounted]);
+  }, [selectedImage, mounted]);
 
-  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('please select an image file');
+      Toast.error('Please select an image file');
       return;
     }
 
-    // Validate file size (5MB limit for on-chain storage)
-    if (file.size > 5 * 1024 * 1024) {
-      alert('image must be smaller than 5MB');
-      return;
-    }
+    // With cNFTs, images are stored on IPFS so we don't need the 5MB on-chain limit
+    // Optional: You could still set a reasonable limit for user experience (e.g., 50MB)
+    // if (file.size > 50 * 1024 * 1024) {
+    //   Toast.error('Image must be smaller than 50MB');
+    //   return;
+    // }
 
     setSelectedImage(file);
 
-    // Create preview
+    // Create preview and get dimensions
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setImagePreview(e.target?.result as string);
+    reader.onload = async (e) => {
+      const preview = e.target?.result as string;
+      setImagePreview(preview);
+      
+      // Get image dimensions
+      try {
+        const dimensions = await getImageDimensions(file);
+        setImageDimensions(dimensions);
+        console.log('📐 Image dimensions:', dimensions);
+      } catch (error) {
+        console.warn('Could not get image dimensions:', error);
+        setImageDimensions(null);
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -75,6 +145,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
   const removeImage = () => {
     setSelectedImage(null);
     setImagePreview(null);
+    setImageDimensions(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -84,17 +155,17 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
     e.preventDefault();
     
     if (!wallet.connected || !wallet.publicKey) {
-      alert('please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
     if (!content.trim() && !selectedImage) {
-      alert('please enter some content or select an image');
+      Toast.warning('Please enter some content or select an image');
       return;
     }
 
     if (content.length > 280) {
-      alert('post must be 280 characters or less');
+      Toast.error('Post must be 280 characters or less');
       return;
     }
 
@@ -103,19 +174,39 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
       const customService = new SolcialsCustomProgramService(connection);
       
       if (selectedImage) {
-        // Image post with platform fee
+        // Image post with cNFT creation
         setIsUploadingImage(true);
         
         try {
-          console.log('📸 Creating image post with Solcials program...');
-          await customService.createImagePost(wallet, content.trim());
+          console.log('🎨 Creating image post with NFT...');
           
-          // TODO: Implement image chunking in a follow-up step
-          console.log('⚠️ Image chunking not yet implemented - post created without image data');
+          // Step 1: Create the NFT
+          const nftService = getSimplifiedNFTService();
+          const { nftAddress } = await nftService.createImageNFT(
+            {
+              publicKey: wallet.publicKey,
+              signTransaction: wallet.signTransaction,
+              signAllTransactions: wallet.signAllTransactions,
+              connected: wallet.connected
+            },
+            selectedImage,
+            content.trim()
+          );
+          
+          console.log('✅ NFT created:', nftAddress.toString());
+          
+          // Step 2: Create the image post with NFT reference
+          await customService.createImagePostWithCNft(
+            wallet, 
+            content.trim(), 
+            nftAddress
+          );
+          
+          console.log('✅ Image post created with NFT reference!');
           
         } catch (error) {
-          console.error('Solcials program image post failed:', error);
-          alert('Failed to create image post. Please try again.');
+          console.error('Failed to create image post with NFT:', error);
+          Toast.error('Failed to create image post. Please try again.');
           return;
         } finally {
           setIsUploadingImage(false);
@@ -133,22 +224,18 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
       onPostCreated();
       
       // Success feedback
-      const successMsg = document.createElement('div');
-      successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      successMsg.textContent = selectedImage 
-        ? '🎉✨ Premium image post created!' 
-        : '🎉📝 Text post created!';
-      
-      document.body.appendChild(successMsg);
-      setTimeout(() => document.body.removeChild(successMsg), 4000);
+      Toast.success(selectedImage 
+        ? 'Image post created with NFT!' 
+        : 'Text post created!'
+      );
       
     } catch (error) {
       console.error('error creating post:', error);
       
       if (error instanceof Error && error.message.includes('User profile')) {
-        alert('Creating your user profile first, then try posting again.');
+        Toast.info('Creating your user profile first, then try posting again.');
       } else {
-        alert('failed to create post. please try again.');
+        Toast.error('Failed to create post. Please try again.');
       }
     } finally {
       setIsPosting(false);
@@ -204,59 +291,99 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
 
 
   return (
-    <div className="space-y-4">
-      <Card className="shadow-sm">
-        <CardHeader className="pb-3">
+    <div className="space-y-4 w-full">
+      <Card className="shadow-sm w-full border-0 sm:border">
+        <CardHeader className="pb-4 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center space-x-3">
-            <div className="flex-1">
+            <div className="flex-1 min-w-0">
               <div className="flex items-center space-x-2">
                 {profileLoading ? (
                   <div className="flex items-center space-x-2">
                     <Loader2 className="h-3 w-3 animate-spin" />
-                    <span className="text-sm font-medium text-muted-foreground">loading...</span>
+                    <span className="text-sm font-medium text-muted-foreground">loading profile...</span>
                   </div>
                 ) : (
                   <>
-                    <span className="text-sm font-medium">
-                      {getDisplayName()}
-                    </span>
-                    {getUsername() && (
-                      <span className="text-xs text-muted-foreground">
-                        @{getUsername()}
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {getDisplayName() || 'Anonymous User'}
                       </span>
-                    )}
+                      {getUsername() && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          @{getUsername()}
+                        </span>
+                      )}
+                      {!getUsername() && wallet.publicKey && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          {wallet.publicKey.toString().slice(0, 8)}...{wallet.publicKey.toString().slice(-4)}
+                        </span>
+                      )}
+                      {(!getDisplayName() || !getUsername()) && (
+                        <Badge variant="outline" className="text-xs text-amber-600 border-amber-200 bg-amber-50 flex-shrink-0">
+                          setup profile
+                        </Badge>
+                      )}
+                    </div>
+                    <Badge variant="secondary" className="text-xs flex-shrink-0">
+                      <div className="h-2 w-2 bg-green-500 rounded-full mr-1" />
+                      online
+                    </Badge>
                   </>
                 )}
-                <Badge variant="secondary" className="text-xs">
-                  <div className="h-2 w-2 bg-green-500 rounded-full mr-1" />
-                  online
-                </Badge>
               </div>
-              <p className="text-xs text-muted-foreground">
-                what&apos;s happening?
+              <p className="text-xs text-muted-foreground truncate">
+                {(!getDisplayName() || !getUsername()) && !profileLoading 
+                  ? "complete your profile to get started" 
+                  : "what's happening?"
+                }
               </p>
             </div>
           </div>
         </CardHeader>
         
-        <CardContent className="space-y-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-3">
-              <Textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder={selectedImage ? "add a caption to your image..." : "share your thoughts with the solana community..."}
-                className={`min-h-[120px] resize-none border-0 focus-visible:ring-1 text-base placeholder:text-muted-foreground/60 ${
-                  isOverLimit ? 'focus-visible:ring-red-500' : 'focus-visible:ring-primary'
-                }`}
-                disabled={isPosting}
-              />
+        <CardContent className="space-y-4 px-4 sm:px-6 lg:px-8 pb-6">
+          <form onSubmit={handleSubmit} className="space-y-4 w-full">
+            <div className="space-y-4 w-full">
+              <div className="w-full overflow-hidden">
+                <Textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder={selectedImage ? "add a caption to your image..." : "share your thoughts with the solana community..."}
+                  className={`min-h-[160px] sm:min-h-[200px] w-full resize-none border-0 focus-visible:ring-1 text-base placeholder:text-muted-foreground/60 break-words whitespace-pre-wrap overflow-hidden ${
+                    isOverLimit ? 'focus-visible:ring-red-500' : 'focus-visible:ring-primary'
+                  }`}
+                  style={{
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                    whiteSpace: 'pre-wrap',
+                    maxWidth: '100%',
+                    width: '100%'
+                  }}
+                  disabled={isPosting}
+                />
+              </div>
 
               {/* Image Preview */}
               {imagePreview && (
-                <div className="relative">
-                  <div className="relative rounded-xl overflow-hidden border bg-muted/20">
-                    <Image src={imagePreview} alt="preview" width={400} height={300} className="w-full h-auto max-h-64 object-cover" />
+                <div className="relative w-full overflow-hidden">
+                  <div className="relative rounded-xl overflow-hidden border bg-muted/20 w-full">
+                    <div className="w-full flex justify-center bg-gray-50 dark:bg-gray-900">
+                      <div className="relative max-w-full">
+                        <Image 
+                          src={imagePreview} 
+                          alt="preview" 
+                          width={0}
+                          height={0}
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          className="w-auto h-auto max-w-full max-h-[400px] sm:max-h-[500px] rounded-xl"
+                          style={{ 
+                            width: 'auto',
+                            height: 'auto',
+                            maxWidth: '100%'
+                          }}
+                        />
+                      </div>
+                    </div>
                     {isUploadingImage && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                         <div className="text-white text-center">
@@ -268,26 +395,36 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
                     <button
                       type="button"
                       onClick={removeImage}
-                      className="absolute top-2 right-2 bg-black/70 hover:bg-black/80 text-white rounded-full p-1.5 transition-colors"
+                      className="absolute top-3 right-3 bg-black/70 hover:bg-black/80 text-white rounded-full p-2 transition-colors z-10"
                       disabled={isPosting}
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center">
-                      <Upload className="h-3 w-3 mr-1" />
-                      {selectedImage?.name} ({(selectedImage?.size || 0 / 1024 / 1024).toFixed(2)} MB)
+                  <div className="mt-3 flex items-start justify-between text-sm text-muted-foreground gap-2">
+                    <div className="flex items-center min-w-0 flex-1">
+                      <Upload className="h-4 w-4 mr-2 flex-shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="font-medium truncate">{selectedImage?.name}</span>
+                        <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                          <span className="hidden sm:inline">{selectedImage ? formatFileSize(selectedImage.size) : ''}</span>
+                          {imageDimensions && (
+                            <span className="hidden sm:inline">
+                              • {imageDimensions.width}×{imageDimensions.height}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <div className="text-orange-600 dark:text-orange-400">
-                      cost: {getPostCostDisplay()}
+                    <div className="text-orange-600 dark:text-orange-400 font-medium flex-shrink-0 text-xs sm:text-sm">
+                      {getPostCostDisplay()}
                     </div>
                   </div>
                 </div>
               )}
               
               {/* Character Counter & Actions */}
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between pt-2 gap-2">
                 <div className="flex items-center space-x-2 text-muted-foreground">
                   <input
                     ref={fileInputRef}
@@ -301,7 +438,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
                     variant="ghost"
                     size="sm"
                     onClick={() => fileInputRef.current?.click()}
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-accent flex-shrink-0"
                     disabled={isPosting || selectedImage !== null}
                   >
                     <ImageIcon className="h-4 w-4" />
@@ -310,7 +447,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-accent flex-shrink-0 hidden sm:flex"
                     disabled={isPosting}
                   >
                     <Smile className="h-4 w-4" />
@@ -319,15 +456,15 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-primary hover:bg-accent flex-shrink-0 hidden sm:flex"
                     disabled={isPosting}
                   >
                     <MapPin className="h-4 w-4" />
                   </Button>
                 </div>
                 
-                <div className="flex items-center space-x-3">
-                  <span className={`text-sm font-mono ${
+                <div className="flex items-center space-x-3 flex-shrink-0">
+                  <span className={`text-xs sm:text-sm font-mono font-medium ${
                     isOverLimit ? 'text-red-500' : 
                     remainingChars <= 20 ? 'text-yellow-500' : 
                     'text-muted-foreground'
@@ -338,7 +475,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
                   <Button
                     type="submit"
                     disabled={isPosting || (!content.trim() && !selectedImage) || isOverLimit || isUploadingImage}
-                    className="min-w-[100px] bg-primary hover:bg-primary/90"
+                    className="min-w-[100px] sm:min-w-[120px] h-9 bg-primary hover:bg-primary/90 flex-shrink-0 text-sm"
                   >
                     {isPosting ? (
                       <>
@@ -363,22 +500,50 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
           </form>
 
           {/* Post Info */}
-          <div className="pt-3 border-t bg-muted/20 -mx-6 px-6 py-3 rounded-b-lg">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <div className="flex items-center space-x-2">
-                <Badge variant="outline" className="text-xs bg-purple-50 border-purple-200 text-purple-700">
-                  ✨ solcials program
+          <div className="pt-3 border-t bg-muted/20 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 rounded-b-lg overflow-hidden">
+            <div className="flex items-start justify-between text-xs text-muted-foreground gap-2">
+              <div className="flex items-center flex-wrap gap-1 min-w-0">
+                <Badge variant="outline" className="text-xs bg-purple-50 border-purple-200 text-purple-700 flex-shrink-0">
+                  ✨ solcials
                 </Badge>
-                <Badge variant="outline" className="text-xs">
-                  {selectedImage ? 'premium post' : 'standard post'}
+                <Badge variant="outline" className="text-xs flex-shrink-0">
+                  {selectedImage ? 'NFT' : 'text'}
                 </Badge>
+                {selectedImage && (
+                  <Badge variant="outline" className="text-xs bg-orange-50 border-orange-200 text-orange-700 flex-shrink-0 hidden sm:inline-flex">
+                    🔗 permanent
+                  </Badge>
+                )}
               </div>
-              <div className="text-right">
-                <div className="text-xs text-muted-foreground">
+              <div className="text-right flex-shrink-0">
+                <div className="text-xs text-muted-foreground whitespace-nowrap">
                   cost: {getPostCostDisplay()}
                 </div>
               </div>
             </div>
+            
+            {/* Lighthouse Wallet Info for Image Posts */}
+            {selectedImage && (
+              <div className="mt-2 pt-2 border-t border-border/30 overflow-hidden">
+                <div className="flex items-start justify-between text-xs gap-2">
+                  <div className="flex items-center space-x-2 text-muted-foreground min-w-0 flex-1">
+                    <span className="flex-shrink-0">Lighthouse:</span>
+                    {loadingLighthouse ? (
+                      <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
+                    ) : (
+                      <>
+                        <span className="font-mono truncate text-xs">
+                          {lighthouseBalance.dataLimit ? `${lighthouseBalance.dataLimit.slice(0, 6)}...${lighthouseBalance.dataLimit.slice(-4)}` : 'Loading...'}
+                        </span>
+                        <span className="text-green-600 flex-shrink-0 text-xs">
+                          {lighthouseBalance.dataUsed}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

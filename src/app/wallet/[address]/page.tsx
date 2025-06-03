@@ -31,6 +31,7 @@ import {
   UserPlus,
   UserCheck
 } from 'lucide-react';
+import { Toast } from '../../utils/toast';
 
 interface UserProfile {
   user: PublicKey;
@@ -148,7 +149,7 @@ export default function WalletProfilePage() {
 
   const handleFollow = async () => {
     if (!connected || !publicKey || !userPublicKey) {
-      alert('Please connect your wallet first');
+      Toast.warning('Please connect your wallet first');
       return;
     }
 
@@ -161,15 +162,28 @@ export default function WalletProfilePage() {
       if (isFollowing) {
         await solcialsProgram.unfollowUser({ publicKey, signTransaction, connected }, userPublicKey);
         setIsFollowing(false);
-        alert('Successfully unfollowed user!');
+        Toast.success('Successfully unfollowed user!');
       } else {
         await solcialsProgram.followUser({ publicKey, signTransaction, connected }, userPublicKey);
         setIsFollowing(true);
-        alert('Successfully followed user!');
+        Toast.success('Successfully followed user!');
       }
     } catch (error) {
       console.error('Error following/unfollowing user:', error);
-      alert(`Failed to ${isFollowing ? 'unfollow' : 'follow'} user. Please try again.`);
+      
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      
+      if (errorMessage.includes('haven\'t set up their profile')) {
+        Toast.warning('This user hasn\'t set up their profile yet. They need to create a post or update their profile first.');
+      } else if (errorMessage.includes('already following') || errorMessage.includes('not following')) {
+        Toast.info('Your follow status may have changed. Refreshing...');
+        // Refresh the follow status
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        Toast.error(`Failed to ${isFollowing ? 'unfollow' : 'follow'} user. Please try again.`);
+      }
     } finally {
       setIsRequesting(false);
     }
