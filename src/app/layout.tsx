@@ -17,6 +17,9 @@ export const metadata: Metadata = {
     shortcut: '/ico.png',
     apple: '/ico.png',
   },
+  other: {
+    'theme-color': '#ffffff', // white color for brand
+  },
 };
 
 export default function RootLayout({
