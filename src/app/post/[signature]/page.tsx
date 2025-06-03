@@ -9,9 +9,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Clock, ExternalLink, ImageIcon, UserPlus, MessageSquare, Copy, Check } from 'lucide-react';
+import ReplyDialog from '../../components/ReplyDialog';
+import { ArrowLeft, Clock, ExternalLink, ImageIcon, UserPlus, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import { PublicKey } from '@solana/web3.js';
+import Image from 'next/image';
 
 export default function PostDetailPage() {
   const params = useParams();
@@ -25,12 +27,58 @@ export default function PostDetailPage() {
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
+  const [replies, setReplies] = useState<SocialPost[]>([]);
+  const [loadingReplies, setLoadingReplies] = useState(false);
   
   // Cache for user profiles
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
   
   const { connection } = useConnection();
   const wallet = useWallet();
+
+  const refreshPost = () => {
+    // Re-fetch the post to show any new replies or updates
+    if (signature) {
+      const fetchPost = async () => {
+        try {
+          const socialService = new SolcialsCustomProgramService(connection);
+          const posts = await socialService.getPosts(100);
+          
+          const foundPost = posts.find(p => p.signature === signature || p.id === signature);
+          
+          if (foundPost) {
+            setPost(foundPost);
+            // Fetch user profile for the post author
+            fetchUserProfile(foundPost.author);
+            // Also fetch replies
+            fetchReplies(foundPost.id);
+          }
+        } catch (err) {
+          console.error('Error refreshing post:', err);
+        }
+      };
+      
+      fetchPost();
+    }
+  };
+
+  const fetchReplies = async (postId: string) => {
+    try {
+      setLoadingReplies(true);
+      const socialService = new SolcialsCustomProgramService(connection);
+      const fetchedReplies = await socialService.getReplies(postId, 50);
+      setReplies(fetchedReplies);
+      
+      // Fetch profiles for reply authors
+      fetchedReplies.forEach(reply => {
+        fetchUserProfile(reply.author);
+      });
+    } catch (error) {
+      console.error('Error fetching replies:', error);
+    } finally {
+      setLoadingReplies(false);
+    }
+  };
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -58,6 +106,9 @@ export default function PostDetailPage() {
               setFollowing([]);
             }
           }
+
+          // Fetch replies for this post
+          fetchReplies(foundPost.id);
         } else {
           setError('Post not found');
         }
@@ -392,12 +443,7 @@ export default function PostDetailPage() {
             {hasImage && (
               <div className="mb-3 sm:mb-4">
                 <div className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10">
-                  <img 
-                    src={post.imageUrl} 
-                    alt="Post image" 
-                    className="w-full max-h-60 sm:max-h-96 object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
-                    onClick={() => window.open(post.imageUrl!, '_blank')}
-                  />
+                  <Image src={post.imageUrl || ''} alt="Post Image" width={500} height={500} />
                 </div>
                 {post.imageSize && post.imageSize > 0 && (
                   <p className="text-xs text-muted-foreground mt-2 flex items-center">
@@ -411,14 +457,10 @@ export default function PostDetailPage() {
             {/* Interaction Bar - exactly like PostList */}
             <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-border/50">
               <div className="flex items-center space-x-2 sm:space-x-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2 sm:px-3"
-                >
-                  <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                  <span className="text-xs hidden sm:inline">Reply</span>
-                </Button>
+                <ReplyDialog 
+                  post={post} 
+                  onReplyCreated={refreshPost}
+                />
                 
                 <Button
                   variant="ghost"
@@ -468,6 +510,163 @@ export default function PostDetailPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Inline Replies Section */}
+        <div className="mt-6">
+          <div className="flex items-center space-x-2 mb-4">
+            <div className="h-px bg-border flex-1"></div>
+            <span className="text-sm text-muted-foreground px-3">
+              {(() => {
+                const blockchainCount = post.replies || 0;
+                const loadedCount = replies.length;
+                
+                // Prefer blockchain count if > 0, otherwise show loaded count
+                const displayCount = blockchainCount > 0 ? blockchainCount : loadedCount;
+                
+                if (displayCount > 0) {
+                  return `${displayCount} ${displayCount === 1 ? 'Reply' : 'Replies'}`;
+                }
+                return 'Replies';
+              })()}
+            </span>
+            <div className="h-px bg-border flex-1"></div>
+          </div>
+
+          {loadingReplies ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="animate-pulse">
+                  <div className="flex items-center space-x-3 mb-4">
+                    <div className="h-10 w-10 bg-muted rounded-full"></div>
+                    <div className="space-y-2">
+                      <div className="h-4 w-32 bg-muted rounded"></div>
+                      <div className="h-3 w-24 bg-muted rounded"></div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="h-4 w-full bg-muted rounded"></div>
+                    <div className="h-4 w-3/4 bg-muted rounded"></div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : replies.length > 0 ? (
+            <div className="space-y-4">
+              {replies.map((reply) => {
+                const userHandle = getUserHandle(reply.author);
+                
+                return (
+                  <Card key={reply.id} className="hover:bg-muted/30 transition-all duration-200">
+                    <CardContent className="p-3 sm:p-6">
+                      <div className="flex justify-between items-start mb-3 sm:mb-4">
+                        <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-1 sm:space-x-2">
+                              <button
+                                onClick={() => handleUserClick(reply.author)}
+                                className="font-semibold text-foreground hover:text-primary transition-colors text-sm sm:text-base truncate"
+                              >
+                                {getUserDisplayName(reply.author)}
+                              </button>
+                              {userHandle && (
+                                <span className="text-xs sm:text-sm text-muted-foreground truncate">
+                                  @{userHandle}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm text-muted-foreground mt-1">
+                              <Clock className="h-3 w-3 flex-shrink-0" />
+                              <span className="truncate">{formatTimestamp(reply.timestamp)}</span>
+                              <span className="hidden sm:inline">•</span>
+                              <span className="text-xs hidden sm:inline">reply</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Reply Content */}
+                      <div className="mb-3 sm:mb-4">
+                        <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
+                          {reply.content}
+                        </p>
+                      </div>
+                      
+                      {/* Reply Actions */}
+                      <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-border/50">
+                        <div className="flex items-center space-x-2 sm:space-x-4">
+                          <ReplyDialog 
+                            post={reply} 
+                            onReplyCreated={refreshPost}
+                          />
+                          
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const postUrl = `${window.location.origin}/post/${post.signature}`;
+                              setShareUrl(postUrl);
+                              setShareDialogOpen(true);
+                            }}
+                            className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-8 px-2 sm:px-3"
+                          >
+                            <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                            <span className="text-xs hidden sm:inline">Share</span>
+                          </Button>
+                          
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-all h-8 px-2 sm:px-3"
+                          >
+                            <div className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex items-center justify-center">
+                              ♡
+                            </div>
+                            <span className="text-xs hidden sm:inline">Like</span>
+                          </Button>
+                        </div>
+                        
+                        <div className="flex items-center space-x-1 sm:space-x-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            asChild
+                            className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-8 px-2 sm:px-3"
+                          >
+                            <a
+                              href={`https://solscan.io/tx/${reply.signature}?cluster=devnet`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center space-x-1"
+                            >
+                              <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                              <span className="text-xs hidden sm:inline">View TX</span>
+                            </a>
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <div className="space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-muted rounded-full flex items-center justify-center">
+                    <div className="text-2xl">💬</div>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-medium text-foreground">No replies yet</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Be the first to reply to this post
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
 
       {/* Share Dialog - exactly like PostList */}

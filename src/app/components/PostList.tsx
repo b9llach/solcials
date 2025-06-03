@@ -8,8 +8,11 @@ import { PublicKey } from '@solana/web3.js';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import ReplyDialog from './ReplyDialog';
+import ThreadContext from './ThreadContext';
 import { ExternalLink, UserPlus, Clock, MessageSquare, Loader2, ImageIcon, Users, Copy, Check } from 'lucide-react';
 
 interface PostListProps {
@@ -28,6 +31,11 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
   const [copied, setCopied] = useState(false);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   
+  // Replies functionality
+  const [expandedReplies, setExpandedReplies] = useState<Set<string>>(new Set());
+  const [repliesData, setRepliesData] = useState<Map<string, SocialPost[]>>(new Map());
+  const [loadingReplies, setLoadingReplies] = useState<Set<string>>(new Set());
+  
   // Cache for user profiles to avoid repeated fetches
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
   const [loadingProfiles, setLoadingProfiles] = useState<Set<string>>(new Set());
@@ -39,6 +47,43 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
   const fetchingRef = useRef(false);
   const lastFetchRef = useRef<number>(0);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
+
+  // Browser caching helpers
+  const getCacheKey = (key: string) => `solcials_${key}`;
+  
+  const getCachedData = (key: string, maxAge: number = 30000): unknown => {
+    try {
+      const cached = localStorage.getItem(getCacheKey(key));
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < maxAge) {
+          return data;
+        }
+      }
+    } catch (error) {
+      console.warn('Cache read error:', error);
+    }
+    return null;
+  };
+
+  const setCachedData = (key: string, data: unknown): void => {
+    try {
+      localStorage.setItem(getCacheKey(key), JSON.stringify({
+        data,
+        timestamp: Date.now()
+      }));
+    } catch (error) {
+      console.warn('Cache write error:', error);
+    }
+  };
+
+  const clearCachedData = (key: string): void => {
+    try {
+      localStorage.removeItem(getCacheKey(key));
+    } catch (error) {
+      console.warn('Cache clear error:', error);
+    }
+  };
 
   const fetchPosts = useCallback(async (force = false) => {
     // Prevent multiple simultaneous requests
@@ -54,6 +99,23 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
       return;
     }
 
+    // Try cache first (only for initial load)
+    if (!force && posts.length === 0) {
+      const cachedPosts = getCachedData('posts', 60000); // 1 minute cache
+      if (cachedPosts && Array.isArray(cachedPosts) && cachedPosts.length > 0) {
+        console.log('📦 Using cached posts from localStorage');
+        // Convert cached data back to proper format
+        const restoredPosts = cachedPosts.map(post => ({
+          ...post,
+          author: new PublicKey(post.author),
+          ...(post.replyTo ? { replyTo: new PublicKey(post.replyTo) } : {})
+        }));
+        setPosts(restoredPosts);
+        setLoading(false);
+        return;
+      }
+    }
+
     try {
       fetchingRef.current = true;
       setIsRequesting(true);
@@ -66,17 +128,31 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
       const socialService = new SolcialsCustomProgramService(connection);
       
       // Fetch posts
-      const fetchedPosts = await socialService.getPosts(20); // Reduced from 30
+      const fetchedPosts = await socialService.getPosts(20);
       setPosts(fetchedPosts);
+      
+      // Cache posts for future use
+      const postsToCache = fetchedPosts.map(post => ({
+        ...post,
+        author: post.author.toString(),
+        ...(post.replyTo ? { replyTo: post.replyTo.toString() } : {})
+      }));
+      setCachedData('posts', postsToCache);
       
       // Fetch following list if needed for following feed and wallet is connected
       if (feedType === 'following' && wallet.publicKey && (force || following.length === 0)) {
         try {
+          // Clear cached following data if force refresh
+          if (force) {
+            clearCachedData(`following_${wallet.publicKey.toString()}`);
+          }
+          
           const followingList = await socialService.getFollowing(wallet.publicKey);
           setFollowing(followingList);
+          // Cache following list
+          setCachedData(`following_${wallet.publicKey.toString()}`, followingList.map(pk => pk.toString()));
         } catch (error) {
           console.warn('Error fetching following list:', error);
-          // Don't fail the whole operation if following fetch fails
           setFollowing([]);
         }
       }
@@ -216,20 +292,34 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
       return;
     }
 
+    // Check browser cache first
+    const cachedProfile = getCachedData(`profile_${userKey}`, 300000); // 5 minute cache for profiles
+    if (cachedProfile && typeof cachedProfile === 'object' && cachedProfile !== null) {
+      setUserProfiles(prev => new Map(prev).set(userKey, cachedProfile as { username?: string, displayName?: string }));
+      return;
+    }
+
     try {
       setLoadingProfiles(prev => new Set(prev).add(userKey));
       
       const solcialsProgram = new SolcialsCustomProgramService(connection);
       const profile = await solcialsProgram.getUserProfile(userPubkey);
       
-      setUserProfiles(prev => new Map(prev).set(userKey, {
+      const profileData = {
         username: profile?.username || undefined,
         displayName: profile?.displayName || undefined
-      }));
+      };
+      
+      setUserProfiles(prev => new Map(prev).set(userKey, profileData));
+      
+      // Cache the profile
+      setCachedData(`profile_${userKey}`, profileData);
     } catch (error) {
       console.warn(`Failed to fetch profile for ${userKey}:`, error);
       // Set empty profile to avoid retrying
-      setUserProfiles(prev => new Map(prev).set(userKey, {}));
+      const emptyProfile = {};
+      setUserProfiles(prev => new Map(prev).set(userKey, emptyProfile));
+      setCachedData(`profile_${userKey}`, emptyProfile);
     } finally {
       setLoadingProfiles(prev => {
         const newSet = new Set(prev);
@@ -261,6 +351,54 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
     return profile?.username || null;
   };
 
+  // Fetch replies for a specific post
+  const fetchReplies = useCallback(async (postId: string) => {
+    if (loadingReplies.has(postId) || repliesData.has(postId)) {
+      return; // Already loading or loaded
+    }
+
+    try {
+      setLoadingReplies(prev => new Set(prev).add(postId));
+      const socialService = new SolcialsCustomProgramService(connection);
+      const replies = await socialService.getReplies(postId, 10); // Limit to 10 replies for performance
+      
+      setRepliesData(prev => new Map(prev).set(postId, replies));
+      
+      // Fetch user profiles for reply authors
+      replies.forEach(reply => {
+        fetchUserProfile(reply.author);
+      });
+    } catch (error) {
+      console.error('Error fetching replies:', error);
+    } finally {
+      setLoadingReplies(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(postId);
+        return newSet;
+      });
+    }
+  }, [connection, loadingReplies, repliesData]);
+
+  // Toggle replies visibility
+  const toggleReplies = useCallback(async (postId: string) => {
+    if (expandedReplies.has(postId)) {
+      // Collapse replies
+      setExpandedReplies(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(postId);
+        return newSet;
+      });
+    } else {
+      // Expand replies
+      setExpandedReplies(prev => new Set(prev).add(postId));
+      
+      // Fetch replies if not already loaded
+      if (!repliesData.has(postId)) {
+        await fetchReplies(postId);
+      }
+    }
+  }, [expandedReplies, repliesData, fetchReplies]);
+
   // Effect to fetch user profiles when posts change
   useEffect(() => {
     posts.forEach(post => {
@@ -285,10 +423,24 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
   useEffect(() => {
     if (wallet.connected && wallet.publicKey) {
       fetchUserLikes();
+      
+      // Load cached following list if available
+      if (feedType === 'following') {
+        const cachedFollowing = getCachedData(`following_${wallet.publicKey.toString()}`, 300000); // 5 min cache
+        if (cachedFollowing && Array.isArray(cachedFollowing)) {
+          try {
+            const followingKeys = cachedFollowing.map((keyStr: string) => new PublicKey(keyStr));
+            setFollowing(followingKeys);
+          } catch (error) {
+            console.warn('Error loading cached following list:', error);
+          }
+        }
+      }
     } else {
       setLikedPosts(new Set());
+      setFollowing([]);
     }
-  }, [wallet.connected, wallet.publicKey, fetchUserLikes]);
+  }, [wallet.connected, wallet.publicKey, fetchUserLikes, feedType]);
 
   if (loading) {
     return (
@@ -333,15 +485,24 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
   // Filter posts based on feed type and user filter
   let filteredPosts = posts;
   
+  console.log(`🔍 PostList Debug: feedType=${feedType}, posts.length=${posts.length}, following.length=${following.length}`);
+  
   if (userFilter) {
     // Filter by specific user
     filteredPosts = posts.filter(post => post.author.toString() === userFilter);
+    console.log(`👤 User filter applied: ${filteredPosts.length} posts for user ${userFilter}`);
   } else if (feedType === 'following' && wallet.publicKey) {
     // Filter by following list (include own posts)
+    const beforeFilter = posts.length;
     filteredPosts = posts.filter(post => 
       post.author.equals(wallet.publicKey!) || 
       following.some(followedAddress => followedAddress.equals(post.author))
     );
+    console.log(`👥 Following filter applied: ${beforeFilter} -> ${filteredPosts.length} posts`);
+    console.log(`👥 Following list:`, following.map(pk => pk.toString().slice(0, 8) + '...'));
+    console.log(`👤 Your pubkey:`, wallet.publicKey?.toString().slice(0, 8) + '...');
+  } else {
+    console.log(`🌍 All posts: ${filteredPosts.length} posts (no filter applied)`);
   }
 
   if (userFilter && filteredPosts.length === 0 && posts.length > 0) {
@@ -371,227 +532,381 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   return (
     <>
-      <div className="space-y-3 sm:space-y-4 p-2 sm:p-4">
-        {filteredPosts.map((post) => {
-          // Posts are now pre-filtered and parsed by the service
-          const postContent = post.content;
-          const hasImage = post.imageHash && post.imageUrl;
-          const userHandle = getUserHandle(post.author);
-          const isLiked = likedPosts.has(post.signature);
+      <ScrollArea className="h-[calc(100vh-200px)] w-full max-w-4xl mx-auto">
+        <div className="space-y-3 sm:space-y-4 p-2 sm:p-4">
+          {filteredPosts.map((post) => {
+            // Posts are now pre-filtered and parsed by the service
+            const postContent = post.content;
+            const hasImage = post.imageHash && post.imageUrl;
+            const userHandle = getUserHandle(post.author);
+            const isLiked = likedPosts.has(post.signature);
 
-          const handleShare = async () => {
-            const postUrl = `${window.location.origin}/post/${post.signature}`;
-            setShareUrl(postUrl);
-            setShareDialogOpen(true);
-            setCopied(false);
-          };
+            const handleShare = async () => {
+              const postUrl = `${window.location.origin}/post/${post.signature}`;
+              setShareUrl(postUrl);
+              setShareDialogOpen(true);
+              setCopied(false);
+            };
 
-          const handleLike = async () => {
-            if (!wallet.connected || !wallet.publicKey) {
-              alert('Please connect your wallet to like posts');
-              return;
-            }
-
-            if (isRequesting) {
-              alert('Please wait for current request to complete');
-              return;
-            }
-
-            try {
-              setIsRequesting(true);
-              const solcialsProgram = new SolcialsCustomProgramService(connection);
-              
-              if (isLiked) {
-                // Unlike the post
-                await solcialsProgram.unlikePost(wallet, new PublicKey(post.id));
-                setLikedPosts(prev => {
-                  const newSet = new Set(prev);
-                  newSet.delete(post.signature);
-                  return newSet;
-                });
-                alert('Post unliked!');
-              } else {
-                // Like the post
-                await solcialsProgram.likePost(wallet, new PublicKey(post.id));
-                setLikedPosts(prev => new Set(prev).add(post.signature));
-                alert('Post liked!');
+            const handleLike = async () => {
+              if (!wallet.connected || !wallet.publicKey) {
+                alert('Please connect your wallet to like posts');
+                return;
               }
-            } catch (error) {
-              console.error('Error liking/unliking post:', error);
-              alert(`Failed to ${isLiked ? 'unlike' : 'like'} post. Please try again.`);
-            } finally {
-              setIsRequesting(false);
-            }
-          };
 
-          return (
-            <Card key={post.signature} className="hover:bg-muted/30 transition-all duration-200 shadow-sm border">
-              <CardContent className="p-3 sm:p-6">
-                <div className="flex justify-between items-start mb-3 sm:mb-4">
-                  <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-1 sm:space-x-2">
-                        <button
-                          onClick={() => handleUserClick(post.author)}
-                          className="font-semibold text-foreground hover:text-primary transition-colors text-sm sm:text-base truncate"
-                        >
-                          {getUserDisplayName(post.author)}
-                        </button>
-                        {userHandle && (
-                          <span className="text-xs sm:text-sm text-muted-foreground truncate">
-                            @{userHandle}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm text-muted-foreground mt-1">
-                        <Clock className="h-3 w-3 flex-shrink-0" />
-                        <span className="truncate">{formatTimestamp(post.timestamp)}</span>
-                        <span className="hidden sm:inline">•</span>
-                        <span className="text-xs hidden sm:inline">on chain</span>
-                      </div>
-                    </div>
-                  </div>
-                  {wallet.connected && 
-                   wallet.publicKey && 
-                   !post.author.equals(wallet.publicKey) && (
-                    <Button
-                      onClick={() => isFollowing(post.author) ? handleUnfollow(post.author) : handleFollow(post.author)}
-                      size="sm"
-                      variant={isFollowing(post.author) ? "secondary" : "outline"}
-                      className="flex items-center space-x-1 hover:bg-primary hover:text-primary-foreground transition-all ml-2 flex-shrink-0"
-                      disabled={isRequesting}
-                    >
-                      <UserPlus className="h-3 w-3 flex-shrink-0" />
-                      <span className="hidden sm:inline">
-                        {isRequesting 
-                          ? (isFollowing(post.author) ? 'Unfollowing...' : 'Following...') 
-                          : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
-                        }
-                      </span>
-                      <span className="sm:hidden text-xs">
-                        {isRequesting 
-                          ? (isFollowing(post.author) ? '...' : '...') 
-                          : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
-                        }
-                      </span>
-                    </Button>
-                  )}
-                </div>
+              if (isRequesting) {
+                alert('Please wait for current request to complete');
+                return;
+              }
+
+              try {
+                setIsRequesting(true);
+                const solcialsProgram = new SolcialsCustomProgramService(connection);
                 
-                {/* Post Content */}
-                {postContent && (
-                  <div className="mb-3 sm:mb-4">
-                    <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-                      {postContent}
-                    </p>
+                if (isLiked) {
+                  // Unlike the post
+                  await solcialsProgram.unlikePost(wallet, new PublicKey(post.id));
+                  setLikedPosts(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(post.signature);
+                    return newSet;
+                  });
+                  alert('Post unliked!');
+                } else {
+                  // Like the post
+                  await solcialsProgram.likePost(wallet, new PublicKey(post.id));
+                  setLikedPosts(prev => new Set(prev).add(post.signature));
+                  alert('Post liked!');
+                }
+              } catch (error) {
+                console.error('Error liking/unliking post:', error);
+                alert(`Failed to ${isLiked ? 'unlike' : 'like'} post. Please try again.`);
+              } finally {
+                setIsRequesting(false);
+              }
+            };
+
+            return (
+              <Card key={post.signature} className="hover:bg-muted/30 transition-all duration-200 shadow-sm border">
+                {/* Show thread context if this is a reply */}
+                {post.replyTo && (
+                  <div className="p-3 sm:p-6 pb-0">
+                    <ThreadContext 
+                      replyToId={post.replyTo.toString()} 
+                      onOriginalPostClick={(originalPost) => {
+                        window.location.href = `/post/${originalPost.signature}`;
+                      }}
+                    />
                   </div>
                 )}
-
-                {/* Post Image */}
-                {hasImage && (
-                  <div className="mb-3 sm:mb-4">
-                    <div className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10">
-                      <img 
-                        src={post.imageUrl} 
-                        alt="Post image" 
-                        className="w-full max-h-60 sm:max-h-96 object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
-                        onClick={() => window.open(post.imageUrl!, '_blank')}
-                      />
+                
+                <CardContent className="p-3 sm:p-6">
+                  <div className="flex justify-between items-start mb-3 sm:mb-4">
+                    <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-1 sm:space-x-2">
+                          <button
+                            onClick={() => handleUserClick(post.author)}
+                            className="font-semibold text-foreground hover:text-primary transition-colors text-sm sm:text-base truncate"
+                          >
+                            {getUserDisplayName(post.author)}
+                          </button>
+                          {userHandle && (
+                            <span className="text-xs sm:text-sm text-muted-foreground truncate">
+                              @{userHandle}
+                            </span>
+                          )}
+                          {/* Show reply indicator */}
+                          {post.replyTo && (
+                            <>
+                              <span className="text-xs text-muted-foreground">•</span>
+                              <span className="text-xs text-blue-500">replying</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm text-muted-foreground mt-1">
+                          <Clock className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">{formatTimestamp(post.timestamp)}</span>
+                          <span className="hidden sm:inline">•</span>
+                          <span className="text-xs hidden sm:inline">on chain</span>
+                        </div>
+                      </div>
                     </div>
-                    {post.imageSize && post.imageSize > 0 && (
-                      <p className="text-xs text-muted-foreground mt-2 flex items-center">
-                        <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
-                        <span className="truncate">{(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS</span>
-                      </p>
+                    {wallet.connected && 
+                     wallet.publicKey && 
+                     !post.author.equals(wallet.publicKey) && (
+                      <Button
+                        onClick={() => isFollowing(post.author) ? handleUnfollow(post.author) : handleFollow(post.author)}
+                        size="sm"
+                        variant={isFollowing(post.author) ? "secondary" : "outline"}
+                        className="flex items-center space-x-1 hover:bg-primary hover:text-primary-foreground transition-all ml-2 flex-shrink-0"
+                        disabled={isRequesting}
+                      >
+                        <UserPlus className="h-3 w-3 flex-shrink-0" />
+                        <span className="hidden sm:inline">
+                          {isRequesting 
+                            ? (isFollowing(post.author) ? 'Unfollowing...' : 'Following...') 
+                            : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
+                          }
+                        </span>
+                        <span className="sm:hidden text-xs">
+                          {isRequesting 
+                            ? (isFollowing(post.author) ? '...' : '...') 
+                            : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
+                          }
+                        </span>
+                      </Button>
                     )}
                   </div>
-                )}
-                
-                {/* Interaction Bar */}
-                <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-border/50">
-                  <div className="flex items-center space-x-2 sm:space-x-4">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2 sm:px-3"
-                    >
-                      <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                      <span className="text-xs hidden sm:inline">Reply</span>
-                    </Button>
-                    
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleShare}
-                      className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-8 px-2 sm:px-3"
-                    >
-                      <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
-                      <span className="text-xs hidden sm:inline">Share</span>
-                    </Button>
-                    
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleLike}
-                      className={`transition-all h-8 px-2 sm:px-3 ${
-                        isLiked 
-                          ? 'text-red-500 bg-red-50 dark:bg-red-950/20' 
-                          : 'text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20'
-                      }`}
-                    >
-                      <div className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex items-center justify-center">
-                        {isLiked ? '♥' : '♡'}
-                      </div>
-                      <span className="text-xs hidden sm:inline">{isLiked ? 'Unlike' : 'Like'}</span>
-                    </Button>
-                  </div>
                   
-                  <div className="flex items-center space-x-1 sm:space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      asChild
-                      className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-8 px-2 sm:px-3"
-                    >
-                      <a
-                        href={`https://solscan.io/tx/${post.signature}?cluster=devnet`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center space-x-1"
+                  {/* Post Content */}
+                  {postContent && (
+                    <div className="mb-3 sm:mb-4">
+                      <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
+                        {postContent}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Post Image */}
+                  {hasImage && (
+                    <div className="mb-3 sm:mb-4">
+                      <div className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10">
+                        <img 
+                          src={post.imageUrl} 
+                          alt="Post image" 
+                          className="w-full max-h-60 sm:max-h-96 object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
+                          onClick={() => window.open(post.imageUrl!, '_blank')}
+                        />
+                      </div>
+                      {post.imageSize && post.imageSize > 0 && (
+                        <p className="text-xs text-muted-foreground mt-2 flex items-center">
+                          <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
+                          <span className="truncate">{(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* Interaction Bar */}
+                  <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-border/50">
+                    <div className="flex items-center space-x-2 sm:space-x-4">
+                      <div className="flex items-center space-x-1">
+                        <ReplyDialog 
+                          post={post} 
+                          onReplyCreated={() => {
+                            debouncedFetchPosts(true);
+                            // Clear replies cache to refresh count
+                            setRepliesData(prev => {
+                              const newMap = new Map(prev);
+                              newMap.delete(post.id);
+                              return newMap;
+                            });
+                          }}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => toggleReplies(post.id)}
+                          className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2"
+                        >
+                          <MessageSquare className="h-3 w-3 mr-1" />
+                          <span className="text-xs">
+                            {(() => {
+                              // Show blockchain count if > 0, otherwise show loaded count, otherwise show nothing
+                              const blockchainCount = post.replies || 0;
+                              const loadedReplies = repliesData.get(post.id);
+                              const loadedCount = loadedReplies ? loadedReplies.length : 0;
+                              
+                              if (blockchainCount > 0) {
+                                return blockchainCount;
+                              } else if (loadedCount > 0) {
+                                return loadedCount;
+                              } else if (expandedReplies.has(post.id)) {
+                                return '0';
+                              } else {
+                                return ''; // Show nothing until expanded
+                              }
+                            })()}
+                          </span>
+                          {expandedReplies.has(post.id) ? (
+                            <span className="text-xs ml-1">↑</span>
+                          ) : (
+                            <span className="text-xs ml-1">↓</span>
+                          )}
+                        </Button>
+                      </div>
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleShare}
+                        className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-8 px-2 sm:px-3"
                       >
-                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
-                        <span className="text-xs hidden sm:inline">View TX</span>
-                      </a>
-                    </Button>
-
+                        <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                        <span className="text-xs hidden sm:inline">Share</span>
+                      </Button>
+                      
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleLike}
+                        className={`transition-all h-8 px-2 sm:px-3 ${
+                          isLiked 
+                            ? 'text-red-500 bg-red-50 dark:bg-red-950/20' 
+                            : 'text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20'
+                        }`}
+                      >
+                        <div className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex items-center justify-center">
+                          {isLiked ? '♥' : '♡'}
+                        </div>
+                        <span className="text-xs hidden sm:inline">{isLiked ? 'Unlike' : 'Like'}</span>
+                      </Button>
+                    </div>
+                    
+                    <div className="flex items-center space-x-1 sm:space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        asChild
+                        className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-8 px-2 sm:px-3"
+                      >
+                        <a
+                          href={`https://solscan.io/tx/${post.signature}?cluster=devnet`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center space-x-1"
+                        >
+                          <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                          <span className="text-xs hidden sm:inline">View TX</span>
+                        </a>
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
 
-        {/* Load More Button */}
-        {posts.length >= 10 && (
-          <div className="text-center py-4">
-            <Button 
-              variant="outline" 
-              onClick={() => fetchPosts(true)}
-              disabled={isRequesting}
-              className="min-w-[120px]"
-            >
-              {isRequesting ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                'Load More'
-              )}
-            </Button>
-          </div>
-        )}
-      </div>
+                  {/* Replies Dropdown */}
+                  {expandedReplies.has(post.id) && (
+                    <div className="mt-4 border-t border-border/30 pt-4">
+                      {loadingReplies.has(post.id) ? (
+                        <div className="flex items-center justify-center py-4">
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          <span className="text-sm text-muted-foreground">Loading replies...</span>
+                        </div>
+                      ) : (
+                        <>
+                          {(() => {
+                            const replies = repliesData.get(post.id);
+                            if (!replies || replies.length === 0) {
+                              return (
+                                <div className="text-center py-4 text-sm text-muted-foreground">
+                                  No replies yet. Be the first to reply!
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="space-y-3">
+                                {replies.slice(0, 5).map((reply) => {
+                                  const replyUserHandle = getUserHandle(reply.author);
+                                  return (
+                                    <div key={reply.id} className="pl-4 border-l-2 border-muted">
+                                      <div className="space-y-2">
+                                        <div className="flex items-center space-x-2">
+                                          <button
+                                            onClick={() => handleUserClick(reply.author)}
+                                            className="font-semibold text-sm hover:text-primary transition-colors"
+                                          >
+                                            {getUserDisplayName(reply.author)}
+                                          </button>
+                                          {replyUserHandle && (
+                                            <span className="text-xs text-muted-foreground">@{replyUserHandle}</span>
+                                          )}
+                                          <span className="text-xs text-muted-foreground">•</span>
+                                          <span className="text-xs text-muted-foreground">
+                                            {formatTimestamp(reply.timestamp)}
+                                          </span>
+                                        </div>
+                                        <p className="text-sm leading-relaxed pl-0">
+                                          {reply.content}
+                                        </p>
+                                        <div className="flex items-center space-x-3">
+                                          <ReplyDialog 
+                                            post={reply} 
+                                            onReplyCreated={() => {
+                                              debouncedFetchPosts(true);
+                                              // Refresh replies for this thread
+                                              setRepliesData(prev => {
+                                                const newMap = new Map(prev);
+                                                newMap.delete(post.id);
+                                                return newMap;
+                                              });
+                                              fetchReplies(post.id);
+                                            }}
+                                          />
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => {
+                                              const replyUrl = `${window.location.origin}/post/${post.signature}`;
+                                              setShareUrl(replyUrl);
+                                              setShareDialogOpen(true);
+                                            }}
+                                            className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-6 px-2"
+                                          >
+                                            <ExternalLink className="h-3 w-3 mr-1" />
+                                            <span className="text-xs">Share</span>
+                                          </Button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                {replies.length > 5 && (
+                                  <div className="text-center pt-2">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleUserClick(post.author)}
+                                      className="text-blue-500 hover:text-blue-600 text-xs"
+                                    >
+                                      View all {replies.length} replies →
+                                    </Button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {/* Load More Button */}
+          {posts.length >= 10 && (
+            <div className="text-center py-4">
+              <Button 
+                variant="outline" 
+                onClick={() => fetchPosts(true)}
+                disabled={isRequesting}
+                className="min-w-[120px]"
+              >
+                {isRequesting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Load More'
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
 
       {/* Share Dialog */}
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>

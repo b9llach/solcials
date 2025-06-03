@@ -6,7 +6,6 @@ import Header from './components/Header';
 import CreatePost from './components/CreatePost';
 import PostList from './components/PostList';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogTrigger, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { createLiveUpdateService } from './utils/liveUpdates';
@@ -77,11 +76,11 @@ export default function Home() {
       <Header />
       
       <div className="flex-1 flex overflow-hidden">
-        <div className="container mx-auto px-2 sm:px-4 max-w-2xl flex h-full">
+        <div className="container mx-auto px-2 sm:px-4 max-w-5xl flex h-full">
           {/* Main Feed - Full width Twitter-like layout */}
           <main className="flex-1 flex flex-col border-x border-border/50 min-w-0">
             {/* Feed Tabs */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full h-full flex flex-col">
               <div className="border-b border-border/50 sticky top-0 bg-background/95 backdrop-blur z-10">
                 <TabsList className="grid w-full grid-cols-2 h-11 sm:h-12 bg-transparent border-0 rounded-none">
                   <TabsTrigger 
@@ -105,27 +104,23 @@ export default function Home() {
               </div>
 
               {/* All Posts Feed */}
-              <TabsContent value="all" className="flex-1 m-0">
-                <ScrollArea className="h-full">
-                  <PostList refreshTrigger={refreshTrigger} feedType="all" />
-                </ScrollArea>
+              <TabsContent value="all" className="flex-1 m-0 h-0">
+                <PostList refreshTrigger={refreshTrigger} feedType="all" />
               </TabsContent>
 
               {/* Following Feed */}
-              <TabsContent value="following" className="flex-1 m-0">
-                <ScrollArea className="h-full">
-                  {connected && publicKey ? (
-                    <PostList refreshTrigger={refreshTrigger} feedType="following" />
-                  ) : (
-                    <div className="p-4 sm:p-8 text-center">
-                      <Users className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-4 text-muted-foreground" />
-                      <h3 className="text-base sm:text-lg font-medium mb-2">connect to see following</h3>
-                      <p className="text-sm text-muted-foreground">
-                        connect your wallet to see posts from people you follow
-                      </p>
-                    </div>
-                  )}
-                </ScrollArea>
+              <TabsContent value="following" className="flex-1 m-0 h-0">
+                {connected && publicKey ? (
+                  <PostList refreshTrigger={refreshTrigger} feedType="following" />
+                ) : (
+                  <div className="p-4 sm:p-8 text-center">
+                    <Users className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-base sm:text-lg font-medium mb-2">connect to see following</h3>
+                    <p className="text-sm text-muted-foreground">
+                      connect your wallet to see posts from people you follow
+                    </p>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </main>

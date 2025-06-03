@@ -558,7 +558,9 @@ export default function ProfilePage() {
           </TabsList>
           
           <TabsContent value="posts" className="mt-6">
-            <PostList refreshTrigger={0} userFilter={publicKey?.toString()} />
+            <div className="max-h-[80vh] overflow-y-auto">
+              <PostList refreshTrigger={0} userFilter={publicKey?.toString()} />
+            </div>
           </TabsContent>
           
           <TabsContent value="likes" className="mt-6">
@@ -570,69 +572,71 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
             ) : likedPosts.length > 0 ? (
-              <div className="space-y-4">
-                {likedPosts.map((post) => {
-                  const userHandle = getUserHandle(post.author);
-                  
-                  return (
-                    <Card key={post.id} className="hover:bg-muted/30 transition-all duration-200">
-                      <CardContent className="p-4">
-                        <div className="space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                              <button className="font-semibold text-foreground hover:text-primary transition-colors">
-                                {getUserDisplayName(post.author)}
-                              </button>
-                              {userHandle && (
-                                <span className="text-sm text-muted-foreground">
-                                  @{userHandle}
-                                </span>
-                              )}
+              <div className="max-h-[500px] overflow-y-auto">
+                <div className="space-y-4">
+                  {likedPosts.map((post) => {
+                    const userHandle = getUserHandle(post.author);
+                    
+                    return (
+                      <Card key={post.id} className="hover:bg-muted/30 transition-all duration-200">
+                        <CardContent className="p-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-2">
+                                <button className="font-semibold text-foreground hover:text-primary transition-colors">
+                                  {getUserDisplayName(post.author)}
+                                </button>
+                                {userHandle && (
+                                  <span className="text-sm text-muted-foreground">
+                                    @{userHandle}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                <span>{new Date(post.timestamp).toLocaleDateString()}</span>
+                              </div>
                             </div>
-                            <div className="flex items-center space-x-2 text-xs text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              <span>{new Date(post.timestamp).toLocaleDateString()}</span>
-                            </div>
-                          </div>
-                          <p className="text-sm leading-relaxed">{post.content}</p>
-                          <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                            <div className="flex items-center space-x-1 text-xs text-muted-foreground">
-                              <Heart className="h-3 w-3 text-red-500" />
-                              <span>liked</span>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleShare(post)}
-                                className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-auto px-2 py-1"
-                              >
-                                <ExternalLink className="h-3 w-3 mr-1" />
-                                <span className="text-xs">Share</span>
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                asChild
-                                className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-auto px-2 py-1"
-                              >
-                                <a
-                                  href={`https://solscan.io/tx/${post.signature}?cluster=devnet`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center space-x-1"
+                            <p className="text-sm leading-relaxed">{post.content}</p>
+                            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+                              <div className="flex items-center space-x-1 text-xs text-muted-foreground">
+                                <Heart className="h-3 w-3 text-red-500" />
+                                <span>liked</span>
+                              </div>
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleShare(post)}
+                                  className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-auto px-2 py-1"
                                 >
-                                  <ExternalLink className="h-3 w-3" />
-                                  <span className="text-xs">View TX</span>
-                                </a>
-                              </Button>
+                                  <ExternalLink className="h-3 w-3 mr-1" />
+                                  <span className="text-xs">Share</span>
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  asChild
+                                  className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-auto px-2 py-1"
+                                >
+                                  <a
+                                    href={`https://solscan.io/tx/${post.signature}?cluster=devnet`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center space-x-1"
+                                  >
+                                    <ExternalLink className="h-3 w-3" />
+                                    <span className="text-xs">View TX</span>
+                                  </a>
+                                </Button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <Card>
@@ -654,25 +658,27 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
             ) : followingData.length > 0 ? (
-              <div className="space-y-2">
-                {followingData.map((userKey) => (
-                  <Card key={userKey.toString()} className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          {userKey.toString().slice(0, 2).toUpperCase()}
+              <div className="max-h-[500px] overflow-y-auto">
+                <div className="space-y-2">
+                  {followingData.map((userKey) => (
+                    <Card key={userKey.toString()} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {userKey.toString().slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{getUserDisplayName(userKey)}</p>
+                            <p className="text-xs text-muted-foreground">@{getUserHandle(userKey)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{getUserDisplayName(userKey)}</p>
-                          <p className="text-xs text-muted-foreground">@{getUserHandle(userKey)}</p>
-                        </div>
+                        <Button variant="outline" size="sm">
+                          following
+                        </Button>
                       </div>
-                      <Button variant="outline" size="sm">
-                        following
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  ))}
+                </div>
               </div>
             ) : (
               <Card>
@@ -694,25 +700,27 @@ export default function ProfilePage() {
                 </CardContent>
               </Card>
             ) : followersData.length > 0 ? (
-              <div className="space-y-2">
-                {followersData.map((userKey) => (
-                  <Card key={userKey.toString()} className="p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                          {userKey.toString().slice(0, 2).toUpperCase()}
+              <div className="max-h-[500px] overflow-y-auto">
+                <div className="space-y-2">
+                  {followersData.map((userKey) => (
+                    <Card key={userKey.toString()} className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                            {userKey.toString().slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="font-medium text-sm">{getUserDisplayName(userKey)}</p>
+                            <p className="text-xs text-muted-foreground">@{getUserHandle(userKey)}</p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="font-medium text-sm">{getUserDisplayName(userKey)}</p>
-                          <p className="text-xs text-muted-foreground">@{getUserHandle(userKey)}</p>
-                        </div>
+                        <Button variant="outline" size="sm">
+                          follow back
+                        </Button>
                       </div>
-                      <Button variant="outline" size="sm">
-                        follow back
-                      </Button>
-                    </div>
-                  </Card>
-                ))}
+                    </Card>
+                  ))}
+                </div>
               </div>
             ) : (
               <Card>

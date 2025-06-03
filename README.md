@@ -106,8 +106,8 @@ This application uses an innovative approach to create a social media platform w
    ```
 
 2. **Start the development server**:
-   ```bash
-   npm run dev
+```bash
+npm run dev
    ```
 
 3. **Open in browser**:

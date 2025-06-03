@@ -6,10 +6,16 @@ export interface SocialPost {
   content: string;
   timestamp: number;
   signature: string;
+  // Reply support
+  replyTo?: PublicKey;
   // Image support
   imageHash?: string;
   imageUrl?: string;
   imageSize?: number;
+  // Interaction counts
+  likes?: number;
+  reposts?: number;
+  replies?: number;
 }
 
 export interface UserProfile {
