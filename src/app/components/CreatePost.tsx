@@ -203,33 +203,12 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
     );
   }
 
-  // Generate avatar initials from display name or address
-  const getAvatarInitials = () => {
-    const displayName = getDisplayName();
-    
-    // If it's a wallet address format, use the first 2 chars
-    if (displayName.includes('...')) {
-      return displayName.slice(0, 2).toUpperCase();
-    }
-    
-    // Otherwise, use first letter of each word, max 2 chars
-    const words = displayName.split(' ');
-    if (words.length >= 2) {
-      return (words[0][0] + words[1][0]).toUpperCase();
-    }
-    return displayName.slice(0, 2).toUpperCase();
-  };
 
   return (
     <div className="space-y-4">
       <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-center space-x-3">
-            <Avatar className="h-10 w-10 ring-2 ring-primary/10">
-              <AvatarFallback className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold">
-                {getAvatarInitials()}
-              </AvatarFallback>
-            </Avatar>
             <div className="flex-1">
               <div className="flex items-center space-x-2">
                 {profileLoading ? (
