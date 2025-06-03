@@ -177,30 +177,87 @@ export class SimplifiedNFTService {
     }
   }
 
-  // Get NFT metadata from local storage
+  // Get NFT metadata from local storage or blockchain
   async getNFTMetadata(mintAddress: PublicKey): Promise<NFTMetadata | null> {
     try {
       const key = `nft_metadata_${mintAddress.toString()}`;
       const stored = localStorage.getItem(key);
       
       if (stored) {
-        return JSON.parse(stored) as NFTMetadata;
+        const metadata = JSON.parse(stored) as NFTMetadata;
+        console.log('📦 Found NFT metadata in localStorage:', mintAddress.toString());
+        return metadata;
       }
 
-      // If not found locally, return basic info
+      // If not found locally, try to fetch from on-chain data
+      console.log('🔍 Attempting to fetch NFT metadata from blockchain:', mintAddress.toString());
+      return await this.fetchNFTFromBlockchain(mintAddress);
+
+    } catch (error) {
+      console.error('Failed to get NFT metadata:', error);
+      
+      // Return a placeholder with the mint address
       return {
         mintAddress: mintAddress.toString(),
-        imageUrl: '',
+        imageUrl: this.generatePlaceholderImage(mintAddress),
         ipfsCid: '',
         creator: '',
-        caption: 'NFT metadata not found',
+        caption: 'NFT metadata unavailable',
+        createdAt: 0,
+      };
+    }
+  }
+
+  // Fetch NFT metadata from blockchain (fallback when localStorage is empty)
+  private async fetchNFTFromBlockchain(mintAddress: PublicKey): Promise<NFTMetadata | null> {
+    try {
+      // Check if mint account exists
+      const accountInfo = await this.connection.getAccountInfo(mintAddress);
+      if (!accountInfo) {
+        console.log('❌ NFT mint account not found:', mintAddress.toString());
+        return null;
+      }
+
+      // For now, return a basic structure since we don't have on-chain metadata yet
+      // In a full implementation, you'd parse the account data or use Metaplex
+      return {
+        mintAddress: mintAddress.toString(),
+        imageUrl: this.generatePlaceholderImage(mintAddress),
+        ipfsCid: '',
+        creator: '',
+        caption: 'NFT created with Solcials',
         createdAt: 0,
       };
 
     } catch (error) {
-      console.error('Failed to get NFT metadata:', error);
+      console.error('Failed to fetch NFT from blockchain:', error);
       return null;
     }
+  }
+
+  // Generate a consistent placeholder image for NFTs
+  private generatePlaceholderImage(mintAddress: PublicKey): string {
+    const shortAddress = mintAddress.toString().slice(0, 8);
+    return `data:image/svg+xml;base64,${btoa(`
+      <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="400" height="300" fill="url(#grad)"/>
+        <text x="200" y="130" text-anchor="middle" font-family="Arial" font-size="18" fill="white" font-weight="bold">
+          Solcials NFT
+        </text>
+        <text x="200" y="155" text-anchor="middle" font-family="Arial" font-size="14" fill="white" opacity="0.9">
+          ${shortAddress}...
+        </text>
+        <text x="200" y="180" text-anchor="middle" font-family="Arial" font-size="12" fill="white" opacity="0.7">
+          Image Loading...
+        </text>
+      </svg>
+    `)}`;
   }
 
   // Check if an NFT exists
@@ -239,6 +296,40 @@ export class SimplifiedNFTService {
       console.error('Failed to get user NFTs:', error);
       return [];
     }
+  }
+
+  // Get multiple gateway URLs for better reliability
+  getImageGatewayUrls(cid: string): string[] {
+    return [
+      `https://gateway.lighthouse.storage/ipfs/${cid}`,
+      `https://ipfs.io/ipfs/${cid}`,
+      `https://gateway.pinata.cloud/ipfs/${cid}`,
+      `https://cloudflare-ipfs.com/ipfs/${cid}`,
+      `https://dweb.link/ipfs/${cid}`
+    ];
+  }
+
+  // Try multiple IPFS gateways to load image
+  async getReliableImageUrl(cid: string): Promise<string> {
+    const gateways = this.getImageGatewayUrls(cid);
+    
+    for (const gatewayUrl of gateways) {
+      try {
+        // Test if the image loads from this gateway
+        const response = await fetch(gatewayUrl, { method: 'HEAD' });
+        if (response.ok) {
+          console.log('✅ Image found on gateway:', gatewayUrl);
+          return gatewayUrl;
+        }
+      } catch (error) {
+        console.warn('Gateway failed:', gatewayUrl, error);
+        continue;
+      }
+    }
+    
+    // If all gateways fail, return the first one anyway
+    console.warn('All IPFS gateways failed, using default');
+    return gateways[0];
   }
 }
 

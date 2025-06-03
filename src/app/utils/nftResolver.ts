@@ -92,22 +92,76 @@ export class NFTResolver {
       const metadata = await nftService.getNFTMetadata(nftAddress);
       
       if (metadata) {
+        // Check if we have a valid image URL
+        let imageUrl = metadata.imageUrl;
+        
+        // If no image URL or it's empty, use a placeholder
+        if (!imageUrl || imageUrl.trim() === '') {
+          imageUrl = this.generateNFTPlaceholder(nftAddress);
+        }
+        
         return {
-          imageUrl: metadata.imageUrl,
+          imageUrl,
           metadata: {
-            name: metadata.caption || 'Untitled NFT',
-            description: metadata.caption || 'No description available',
-            creator: metadata.creator,
-            createdAt: metadata.createdAt
+            name: metadata.caption || 'Solcials NFT',
+            description: metadata.caption || `NFT created on Solcials platform`,
+            creator: metadata.creator || 'Unknown',
+            createdAt: metadata.createdAt || Date.now()
           }
         };
       }
       
-      return null;
+      // If no metadata found, return a placeholder
+      return {
+        imageUrl: this.generateNFTPlaceholder(nftAddress),
+        metadata: {
+          name: 'Solcials NFT',
+          description: 'NFT from Solcials platform',
+          creator: 'Unknown',
+          createdAt: Date.now()
+        }
+      };
+      
     } catch (error) {
       console.error('Failed to fetch NFT metadata:', error);
-      return null;
+      
+      // Return a placeholder on error
+      return {
+        imageUrl: this.generateNFTPlaceholder(nftAddress),
+        metadata: {
+          name: 'NFT',
+          description: 'Unable to load NFT metadata',
+          creator: 'Unknown',
+          createdAt: Date.now()
+        }
+      };
     }
+  }
+
+  // Generate a consistent placeholder for NFTs
+  private static generateNFTPlaceholder(nftAddress: PublicKey): string {
+    const shortAddress = nftAddress.toString().slice(0, 8);
+    return `data:image/svg+xml;base64,${btoa(`
+      <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="nftGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#8b5cf6;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect width="400" height="300" fill="url(#nftGrad)"/>
+        <circle cx="200" cy="120" r="30" fill="white" opacity="0.2"/>
+        <text x="200" y="175" text-anchor="middle" font-family="Arial" font-size="16" fill="white" font-weight="bold">
+          Solcials NFT
+        </text>
+        <text x="200" y="195" text-anchor="middle" font-family="Arial" font-size="12" fill="white" opacity="0.9">
+          ${shortAddress}...
+        </text>
+        <text x="200" y="215" text-anchor="middle" font-family="Arial" font-size="10" fill="white" opacity="0.7">
+          Blockchain verified
+        </text>
+      </svg>
+    `)}`;
   }
 
   // Bulk resolve multiple NFT URLs (useful for post lists)

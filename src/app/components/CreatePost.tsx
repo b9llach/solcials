@@ -231,8 +231,23 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
     } catch (error) {
       console.error('error creating post:', error);
       
-      if (error instanceof Error && error.message.includes('User profile')) {
-        Toast.info('Creating your user profile first, then try posting again.');
+      // Better error debugging for production
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        
+        if (error.message.includes('Lighthouse')) {
+          Toast.error('Image upload failed. Please check your internet connection and try again.');
+        } else if (error.message.includes('User profile')) {
+          Toast.info('Creating your user profile first, then try posting again.');
+        } else if (error.message.includes('API key')) {
+          Toast.error('Image upload service unavailable. Please try posting without an image.');
+        } else {
+          Toast.error('Failed to create post. Please try again.');
+        }
       } else {
         Toast.error('Failed to create post. Please try again.');
       }

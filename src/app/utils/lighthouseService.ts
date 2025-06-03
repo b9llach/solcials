@@ -34,8 +34,16 @@ export class LighthouseService {
 
   constructor() {
     this.apiKey = process.env.NEXT_PUBLIC_LIGHTHOUSE_API_KEY || '';
+    
+    // Better debugging for environment variables
+    console.log('🔍 Lighthouse Service Initialization:');
+    console.log('  - Environment:', process.env.NODE_ENV);
+    console.log('  - API Key present:', !!this.apiKey);
+    console.log('  - API Key length:', this.apiKey.length);
+    
     if (!this.apiKey) {
       console.warn('⚠️ Lighthouse API key not found. Image uploads will fail.');
+      console.warn('  Please ensure NEXT_PUBLIC_LIGHTHOUSE_API_KEY is set in your environment variables.');
     }
   }
 
