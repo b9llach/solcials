@@ -20,8 +20,8 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
     
     if (!post) {
       return {
-        title: 'Post Not Found - Solcials',
-        description: 'This post could not be found.',
+        title: 'post not found on solcials',
+        description: 'this post could not be found',
       };
     }
 
@@ -45,11 +45,11 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
       : post.content;
 
     const title = `${authorDisplayName} ${authorUsername}`;
-    const siteName = 'Solcials - Decentralized Social Media';
+    const siteName = 'solcials';
     const postUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/post/${signature}`;
 
     return {
-      title: `${title} on Solcials`,
+      title: `${title} on solcials`,
       description,
       openGraph: {
         title,
