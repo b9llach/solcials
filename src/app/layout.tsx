@@ -12,6 +12,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "socials",
   description: "completely decentralized social media built on solana",
+  icons: {
+    icon: '/ico.png',
+    shortcut: '/ico.png',
+    apple: '/ico.png',
+  },
 };
 
 export default function RootLayout({
