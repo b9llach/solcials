@@ -1,0 +1,413 @@
+import { SocialPost } from '../types/social';
+import { PublicKey } from '@solana/web3.js';
+
+export interface WebSocketLiveUpdateOptions {
+  onNewPosts: (newPosts: SocialPost[]) => void;
+  onError: (error: Error) => void;
+  enabled: boolean;
+}
+
+interface LogNotificationParams {
+  result: {
+    value: {
+      logs: string[];
+      signature: string;
+    };
+  };
+}
+
+interface TransactionInstruction {
+  programId: string;
+  parsed?: string;
+}
+
+interface TransactionData {
+  transaction: {
+    message: {
+      accountKeys: Array<{ pubkey: string }>;
+      instructions: TransactionInstruction[];
+    };
+    signatures: string[];
+  };
+  blockTime?: number;
+}
+
+// Program IDs
+const MEMO_PROGRAM_ID = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
+const SOLCIALS_PROGRAM_ID = '2dMkuyNN2mUiSWyW1UGTRE7CkfULpudVdMCbASCChLpv'; // Your current deployed program
+
+export class WebSocketLiveUpdateService {
+  private ws: WebSocket | null = null;
+  private onNewPosts: (newPosts: SocialPost[]) => void;
+  private onError: (error: Error) => void;
+  private enabled: boolean = false;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private pingInterval: NodeJS.Timeout | null = null;
+  private lastPostTimestamp: number = 0;
+  private subscriptionId: number | null = null;
+  private isConnecting = false;
+
+  constructor(options: WebSocketLiveUpdateOptions) {
+    this.onNewPosts = options.onNewPosts;
+    this.onError = options.onError;
+    this.enabled = options.enabled;
+    this.lastPostTimestamp = Date.now();
+  }
+
+  start() {
+    if (!this.enabled || this.ws || this.isConnecting) {
+      return;
+    }
+
+    const heliusApiKey = process.env.NEXT_PUBLIC_HELIUS;
+    if (!heliusApiKey) {
+      console.warn('⚠️ Helius API key not found, cannot start WebSocket live updates');
+      this.onError(new Error('Helius API key not configured'));
+      return;
+    }
+
+    console.log('🚀 Starting WebSocket live updates with Helius on devnet...');
+    
+    this.isConnecting = true;
+    
+    try {
+      // Use devnet since our program is deployed there
+      const wsUrl = `wss://devnet.helius-rpc.com/?api-key=${heliusApiKey}`;
+      
+      this.ws = new WebSocket(wsUrl);
+      
+      this.ws.onopen = () => {
+        console.log('✅ WebSocket connected to Helius devnet');
+        this.isConnecting = false;
+        this.reconnectAttempts = 0;
+        this.startPing();
+        this.subscribeToSolcialsPrograms();
+      };
+
+      this.ws.onmessage = (event) => {
+        this.handleMessage(event);
+      };
+
+      this.ws.onclose = (event) => {
+        console.log('📴 WebSocket disconnected:', event.code, event.reason);
+        this.isConnecting = false;
+        this.ws = null;
+        this.subscriptionId = null;
+        
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
+        }
+
+        // Only reconnect if we're still enabled and not intentionally closing
+        if (this.enabled && event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.scheduleReconnect();
+        }
+      };
+
+      this.ws.onerror = (error) => {
+        console.warn('⚠️ WebSocket connection issue (this is normal during navigation):', error);
+        this.isConnecting = false;
+        // Don't call onError for navigation-related disconnections
+        if (this.enabled && this.reconnectAttempts === 0) {
+          this.onError(new Error('WebSocket connection error'));
+        }
+      };
+    } catch (error) {
+      console.error('Failed to create WebSocket connection:', error);
+      this.isConnecting = false;
+      this.onError(error as Error);
+    }
+  }
+
+  stop() {
+    console.log('⏹️ Stopping WebSocket live updates...');
+    this.enabled = false;
+    this.isConnecting = false;
+    
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+
+    if (this.ws) {
+      // Close cleanly with code 1000 (normal closure)
+      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.close(1000, 'Service stopped');
+      }
+      this.ws = null;
+    }
+
+    this.subscriptionId = null;
+    this.reconnectAttempts = 0;
+  }
+
+  setEnabled(enabled: boolean) {
+    this.enabled = enabled;
+    if (enabled) {
+      this.start();
+    } else {
+      this.stop();
+    }
+  }
+
+  private scheduleReconnect() {
+    this.reconnectAttempts++;
+    const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000); // Exponential backoff, max 30s
+    
+    console.log(`🔄 Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    
+    this.reconnectTimeout = setTimeout(() => {
+      if (this.enabled) {
+        this.start();
+      }
+    }, delay);
+  }
+
+  private startPing() {
+    // Send ping every 30 seconds to keep connection alive
+    this.pingInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        // Send a ping request
+        const pingRequest = {
+          jsonrpc: "2.0",
+          id: Math.floor(Math.random() * 1000000),
+          method: "getHealth"
+        };
+        this.ws.send(JSON.stringify(pingRequest));
+      }
+    }, 30000);
+  }
+
+  private subscribeToSolcialsPrograms() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    // Subscribe to logs that mention both the Memo program and your custom Solcials program
+    const subscribeRequest = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "logsSubscribe",
+      params: [
+        {
+          mentions: [
+            MEMO_PROGRAM_ID,      // Current implementation using Memo
+            SOLCIALS_PROGRAM_ID   // Your custom program for future use
+          ]
+        },
+        {
+          commitment: "confirmed"
+        }
+      ]
+    };
+
+    console.log('📡 Subscribing to Solcials program transactions (memo + custom)...');
+    this.ws.send(JSON.stringify(subscribeRequest));
+  }
+
+  private handleMessage(event: MessageEvent) {
+    try {
+      const message = JSON.parse(event.data);
+
+      // Handle subscription confirmation
+      if (message.result && typeof message.result === 'number') {
+        this.subscriptionId = message.result;
+        console.log(`✅ Subscribed to logs with ID: ${this.subscriptionId}`);
+        return;
+      }
+
+      // Handle log notifications
+      if (message.method === 'logsNotification' && message.params) {
+        this.handleLogNotification(message.params as LogNotificationParams);
+      }
+
+    } catch (error) {
+      console.error('Error parsing WebSocket message:', error);
+    }
+  }
+
+  private async handleLogNotification(params: LogNotificationParams) {
+    try {
+      const { result } = params;
+      const { logs, signature } = result.value;
+      
+      // Check if this is a Solcials post by looking for our app identifier in logs
+      const isSolcialsPost = logs.some((log: string) => 
+        log.includes('Solcials:') || 
+        log.includes('"app":"solcials"') ||
+        log.includes('solcials') ||
+        log.includes('Text post created') ||         // Your custom program logs
+        log.includes('Image post created') ||        // Your custom program logs
+        log.includes('Instruction: CreateTextPost') || // Your custom program logs
+        log.includes('Instruction: CreateImagePost')   // Your custom program logs
+      );
+
+      if (!isSolcialsPost) {
+        return; // Not our app's transaction
+      }
+
+      // Get the transaction details to extract the post content
+      const transactionDetails = await this.getTransactionDetails(signature);
+      
+      if (transactionDetails) {
+        const post = this.parseTransactionToPost(transactionDetails);
+        
+        if (post && post.timestamp > this.lastPostTimestamp) {
+          console.log('📢 New post detected via WebSocket!', post);
+          this.lastPostTimestamp = post.timestamp;
+          this.onNewPosts([post]);
+          
+          // Show browser notification
+          this.showBrowserNotification(1);
+        }
+      }
+
+    } catch (error) {
+      console.warn('Error handling log notification:', error);
+    }
+  }
+
+  private async getTransactionDetails(signature: string): Promise<TransactionData | null> {
+    try {
+      const heliusApiKey = process.env.NEXT_PUBLIC_HELIUS;
+      // Use devnet RPC endpoint since our program is deployed there
+      const response = await fetch(`https://devnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'getTransaction',
+          params: [
+            signature,
+            {
+              encoding: 'jsonParsed',
+              maxSupportedTransactionVersion: 0
+            }
+          ]
+        })
+      });
+
+      const data = await response.json();
+      return data.result as TransactionData;
+    } catch (error) {
+      console.error('Error fetching transaction details:', error);
+      return null;
+    }
+  }
+
+  private parseTransactionToPost(transaction: TransactionData): SocialPost | null {
+    try {
+      // Extract instruction data - could be from memo program or custom program
+      const instructions = transaction.transaction.message.instructions;
+      
+      // First, try to find memo instruction (current implementation)
+      const memoInstruction = instructions.find((ix: TransactionInstruction) => 
+        ix.programId === MEMO_PROGRAM_ID
+      );
+
+      // Then, try to find custom Solcials program instruction (future implementation)
+      const solcialsInstruction = instructions.find((ix: TransactionInstruction) => 
+        ix.programId === SOLCIALS_PROGRAM_ID
+      );
+
+      let postData: { app?: string; content?: string; imageHash?: string; imageUrl?: string; imageSize?: number };
+
+      if (solcialsInstruction) {
+        // TODO: Parse custom program instruction data
+        // This would involve deserializing the account data from your Post struct
+        console.log('🎯 Custom Solcials program instruction detected - implement parsing');
+        return null; // For now, until we implement custom program parsing
+      } else if (memoInstruction && memoInstruction.parsed) {
+        // Parse memo instruction (current implementation)
+        const memoData = memoInstruction.parsed;
+
+        try {
+          postData = JSON.parse(memoData);
+        } catch {
+          // If not JSON, treat as plain text
+          postData = { content: memoData };
+        }
+
+        // Verify it's a Solcials post
+        if (!postData.app || postData.app !== 'solcials') {
+          return null;
+        }
+      } else {
+        return null;
+      }
+
+      // Extract author from transaction
+      const authorPubkey = transaction.transaction.message.accountKeys[0].pubkey;
+
+      const post: SocialPost = {
+        id: `${authorPubkey}_${transaction.blockTime || Date.now()}`,
+        author: new PublicKey(authorPubkey),
+        content: postData.content || '',
+        timestamp: (transaction.blockTime || Date.now()) * 1000,
+        signature: transaction.transaction.signatures[0],
+        // Handle image data if present
+        ...(postData.imageHash && {
+          imageHash: postData.imageHash,
+          imageUrl: postData.imageUrl,
+          imageSize: postData.imageSize
+        })
+      };
+
+      return post;
+    } catch (error) {
+      console.error('Error parsing transaction to post:', error);
+      return null;
+    }
+  }
+
+  private showBrowserNotification(count: number) {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('Solcials', {
+        body: `${count} new post${count > 1 ? 's' : ''} on your feed!`,
+        icon: '/favicon.ico',
+        tag: 'new-posts'
+      });
+    }
+  }
+
+  static async requestNotificationPermission(): Promise<boolean> {
+    if (!('Notification' in window)) {
+      return false;
+    }
+
+    if (Notification.permission === 'granted') {
+      return true;
+    }
+
+    if (Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    }
+
+    return false;
+  }
+}
+
+// Utility function to create a WebSocket live update service
+export function createWebSocketLiveUpdateService(
+  onNewPosts: (posts: SocialPost[]) => void
+): WebSocketLiveUpdateService {
+  return new WebSocketLiveUpdateService({
+    onNewPosts,
+    onError: (error) => {
+      console.error('WebSocket live update error:', error);
+    },
+    enabled: true
+  });
+} 

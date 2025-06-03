@@ -1,103 +1,147 @@
-import Image from "next/image";
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
+import Header from './components/Header';
+import CreatePost from './components/CreatePost';
+import PostList from './components/PostList';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogTrigger, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { createLiveUpdateService } from './utils/liveUpdates';
+import { createWebSocketLiveUpdateService } from './utils/liveUpdatesWebSocket';
+import { SocialPost } from './types/social';
+import { Globe, Users, NotebookPenIcon } from 'lucide-react';
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [showMobileComposer, setShowMobileComposer] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
+  
+  const { connection } = useConnection();
+  const { connected, publicKey } = useWallet();
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  // Initialize live updates - WebSocket if Helius API key available, otherwise HTTP polling
+  useEffect(() => {
+    const heliusApiKey = process.env.NEXT_PUBLIC_HELIUS;
+    
+    if (heliusApiKey) {
+      // Use WebSocket for real-time updates with Helius
+      console.log('🚀 Using WebSocket live updates with Helius');
+      const service = createWebSocketLiveUpdateService(
+        (newPosts: SocialPost[]) => {
+          console.log('📢 New posts received via WebSocket:', newPosts.length);
+          setRefreshTrigger(prev => prev + 1);
+        }
+      );
+      
+      service.start();
+
+      return () => {
+        console.log('🧹 Cleaning up WebSocket service...');
+        service.stop();
+      };
+    } else {
+      // Fallback to HTTP polling
+      console.log('⚠️ Helius API key not found, using HTTP polling fallback');
+      const service = createLiveUpdateService(
+        connection,
+        (newPosts: SocialPost[]) => {
+          console.log('📢 New posts received via HTTP polling:', newPosts.length);
+          setRefreshTrigger(prev => prev + 1);
+        },
+        300000 // 5 minutes for HTTP polling
+      );
+      
+      service.start();
+
+      return () => {
+        service.stop();
+      };
+    }
+  }, []); // Remove connection dependency to prevent recreation
+
+  const handlePostCreated = () => {
+    setRefreshTrigger(prev => prev + 1);
+    setShowMobileComposer(false); // Close mobile composer
+  };
+
+  return (
+    <div className="h-screen flex flex-col bg-background">
+      <Header />
+      
+      <div className="flex-1 flex overflow-hidden">
+        <div className="container mx-auto px-4 max-w-2xl flex h-full">
+          {/* Main Feed - Full width Twitter-like layout */}
+          <main className="flex-1 flex flex-col border-x border-border/50 min-w-0">
+            {/* Feed Tabs */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <div className="border-b border-border/50 sticky top-0 bg-background/95 backdrop-blur z-10">
+                <TabsList className="grid w-full grid-cols-2 h-12 bg-transparent border-0 rounded-none">
+                  <TabsTrigger 
+                    value="all" 
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent"
+                  >
+                    <Globe className="h-4 w-4 mr-2" />
+                    all posts
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="following" 
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent"
+                    disabled={!connected}
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    following
+                  </TabsTrigger>
+                </TabsList>
+              </div>
+
+              {/* All Posts Feed */}
+              <TabsContent value="all" className="flex-1 m-0">
+                <ScrollArea className="h-full">
+                  <PostList refreshTrigger={refreshTrigger} feedType="all" />
+                </ScrollArea>
+              </TabsContent>
+
+              {/* Following Feed */}
+              <TabsContent value="following" className="flex-1 m-0">
+                <ScrollArea className="h-full">
+                  {connected && publicKey ? (
+                    <PostList refreshTrigger={refreshTrigger} feedType="following" />
+                  ) : (
+                    <div className="p-8 text-center">
+                      <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                      <h3 className="text-lg font-medium mb-2">connect to see following</h3>
+                      <p className="text-muted-foreground">
+                        connect your wallet to see posts from people you follow
+                      </p>
+                    </div>
+                  )}
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
+          </main>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+
+      {/* Floating Action Button - Bigger and bolder + */}
+      {connected && (
+        <Dialog open={showMobileComposer} onOpenChange={setShowMobileComposer}>
+          <DialogTrigger asChild>
+            <Button
+              size="lg"
+              className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-lg z-40"
+            >
+              <NotebookPenIcon className="h-10 w-10 font-bold stroke-[3]" />
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-md mx-4 max-h-[80vh] overflow-y-auto">
+            <DialogTitle className="sr-only">create new post</DialogTitle>
+            <CreatePost onPostCreated={handlePostCreated} />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
