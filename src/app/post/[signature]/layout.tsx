@@ -75,8 +75,8 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
         card: post.imageUrl ? 'summary_large_image' : 'summary',
         title,
         description,
-        creator: authorUsername || '@solcials',
-        site: '@solcials',
+        creator: authorUsername || 'unknown creator',
+        site: 'solcials',
         ...(post.imageUrl && {
           images: [post.imageUrl],
         }),
@@ -85,14 +85,14 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
       other: {
         'discord:title': title,
         'discord:description': description,
-        'theme-color': '#8B5CF6', // Purple color for brand
+        'theme-color': '#ffffff', // white color for brand
       },
     };
   } catch (error) {
     console.error('Error generating metadata:', error);
     return {
-      title: 'Solcials - Decentralized Social Media',
-      description: 'View posts on the Solana blockchain',
+      title: 'solcials',
+      description: 'view posts on the solana blockchain',
     };
   }
 }
