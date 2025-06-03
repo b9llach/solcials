@@ -6,6 +6,8 @@ interface ResolvedNFT {
   metadata: {
     name: string;
     description: string;
+    creator: string;
+    createdAt: number;
   };
 }
 
@@ -92,7 +94,12 @@ export class NFTResolver {
       if (metadata) {
         return {
           imageUrl: metadata.imageUrl,
-          metadata: metadata.metadata
+          metadata: {
+            name: metadata.caption || 'Untitled NFT',
+            description: metadata.caption || 'No description available',
+            creator: metadata.creator,
+            createdAt: metadata.createdAt
+          }
         };
       }
       

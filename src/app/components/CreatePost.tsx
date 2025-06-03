@@ -110,16 +110,15 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      Toast.error('Please select an image file');
+      Toast.error('please select an image file');
       return;
     }
 
-    // With cNFTs, images are stored on IPFS so we don't need the 5MB on-chain limit
-    // Optional: You could still set a reasonable limit for user experience (e.g., 50MB)
-    // if (file.size > 50 * 1024 * 1024) {
-    //   Toast.error('Image must be smaller than 50MB');
-    //   return;
-    // }
+    // Add 1MB file size limit for better performance and user experience
+    if (file.size > 1024 * 1024) { // 1MB in bytes
+      Toast.error('image must be smaller than 1MB');
+      return;
+    }
 
     setSelectedImage(file);
 
