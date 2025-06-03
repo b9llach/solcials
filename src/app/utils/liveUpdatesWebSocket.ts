@@ -58,6 +58,11 @@ export class WebSocketLiveUpdateService {
 
   start() {
     if (!this.enabled || this.ws || this.isConnecting) {
+      console.log('🔄 WebSocket start skipped:', { 
+        enabled: this.enabled, 
+        hasConnection: !!this.ws, 
+        isConnecting: this.isConnecting 
+      });
       return;
     }
 
@@ -69,6 +74,7 @@ export class WebSocketLiveUpdateService {
 
     const networkConfig = getNetworkConfig();
     console.log(`🚀 Starting WebSocket live updates on ${networkConfig.displayName}...`);
+    console.log(`🔗 WebSocket endpoint: ${wsEndpoint.replace(/api-key=[^&]+/, 'api-key=***')}`);
     
     this.isConnecting = true;
     
@@ -88,7 +94,13 @@ export class WebSocketLiveUpdateService {
       };
 
       this.ws.onclose = (event) => {
-        console.log('📴 WebSocket disconnected:', event.code, event.reason);
+        console.log('📴 WebSocket disconnected:', { 
+          code: event.code, 
+          reason: event.reason, 
+          wasClean: event.wasClean,
+          enabled: this.enabled,
+          reconnectAttempts: this.reconnectAttempts 
+        });
         this.isConnecting = false;
         this.ws = null;
         this.subscriptionId = null;
@@ -105,41 +117,85 @@ export class WebSocketLiveUpdateService {
       };
 
       this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error('WebSocket error occurred:', {
+          error,
+          readyState: this.ws?.readyState,
+          url: wsEndpoint.replace(/api-key=[^&]+/, 'api-key=***'),
+          isConnecting: this.isConnecting,
+          enabled: this.enabled
+        });
         this.isConnecting = false;
+        
+        // Call the onError callback if provided
+        if (this.onError) {
+          this.onError(new Error('WebSocket connection failed'));
+        }
       };
 
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);
       this.isConnecting = false;
+      
+      if (this.onError) {
+        this.onError(error instanceof Error ? error : new Error('WebSocket creation failed'));
+      }
     }
   }
 
   stop() {
-    console.log('⏹️ Stopping WebSocket live updates...');
+    console.log('⏹️ Stopping WebSocket live updates...', {
+      enabled: this.enabled,
+      hasConnection: !!this.ws,
+      isConnecting: this.isConnecting,
+      reconnectAttempts: this.reconnectAttempts
+    });
+    
     this.enabled = false;
     this.isConnecting = false;
     
+    // Clear any pending reconnection attempts
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
       this.reconnectTimeout = null;
+      console.log('🧹 Cleared reconnect timeout');
     }
     
+    // Clear ping interval
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
+      console.log('🧹 Cleared ping interval');
     }
 
+    // Close WebSocket connection cleanly
     if (this.ws) {
-      // Close cleanly with code 1000 (normal closure)
-      if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-        this.ws.close(1000, 'Service stopped');
+      const currentState = this.ws.readyState;
+      console.log('🔌 Closing WebSocket connection, state:', {
+        readyState: currentState,
+        CONNECTING: WebSocket.CONNECTING,
+        OPEN: WebSocket.OPEN,
+        CLOSING: WebSocket.CLOSING,
+        CLOSED: WebSocket.CLOSED
+      });
+      
+      try {
+        // Only close if not already closed/closing
+        if (currentState === WebSocket.OPEN || currentState === WebSocket.CONNECTING) {
+          this.ws.close(1000, 'Service stopped');
+          console.log('✅ WebSocket close() called');
+        } else {
+          console.log('ℹ️ WebSocket already closing/closed, skipping close()');
+        }
+      } catch (error) {
+        console.warn('⚠️ Error closing WebSocket:', error);
       }
+      
       this.ws = null;
     }
 
     this.subscriptionId = null;
     this.reconnectAttempts = 0;
+    console.log('🧹 WebSocket service cleanup completed');
   }
 
   setEnabled(enabled: boolean) {

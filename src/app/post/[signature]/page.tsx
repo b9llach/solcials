@@ -2,14 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { useConnection } from '@solana/wallet-adapter-react';
+import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { SolcialsCustomProgramService } from '../../utils/solcialsProgram';
 import { SocialPost } from '../../types/social';
 import { Card, CardContent } from '@/components/ui/card';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, Clock, ExternalLink, ImageIcon } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { ArrowLeft, Clock, ExternalLink, ImageIcon, UserPlus, MessageSquare, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import { PublicKey } from '@solana/web3.js';
 
@@ -19,8 +19,18 @@ export default function PostDetailPage() {
   const [post, setPost] = useState<SocialPost | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isRequesting, setIsRequesting] = useState(false);
+  const [following, setFollowing] = useState<PublicKey[]>([]);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
+  
+  // Cache for user profiles
+  const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
   
   const { connection } = useConnection();
+  const wallet = useWallet();
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -29,12 +39,25 @@ export default function PostDetailPage() {
       try {
         setLoading(true);
         const socialService = new SolcialsCustomProgramService(connection);
-        const posts = await socialService.getPosts(100); // Get more posts to find the specific one
+        const posts = await socialService.getPosts(100);
         
         const foundPost = posts.find(p => p.signature === signature || p.id === signature);
         
         if (foundPost) {
           setPost(foundPost);
+          // Fetch user profile for the post author
+          fetchUserProfile(foundPost.author);
+          
+          // Fetch following list if wallet is connected
+          if (wallet.publicKey) {
+            try {
+              const followingList = await socialService.getFollowing(wallet.publicKey);
+              setFollowing(followingList);
+            } catch (error) {
+              console.warn('Error fetching following list:', error);
+              setFollowing([]);
+            }
+          }
         } else {
           setError('Post not found');
         }
@@ -47,16 +70,180 @@ export default function PostDetailPage() {
     };
 
     fetchPost();
-  }, [signature, connection]);
+  }, [signature, connection, wallet.publicKey]);
 
-  const formatAddress = (address: PublicKey) => {
-    const addressStr = address.toString();
-    return `${addressStr.slice(0, 4)}...${addressStr.slice(-4)}`;
+  const fetchUserProfile = async (userPubkey: PublicKey) => {
+    const userKey = userPubkey.toString();
+    
+    if (userProfiles.has(userKey)) {
+      return;
+    }
+
+    try {
+      const solcialsProgram = new SolcialsCustomProgramService(connection);
+      const profile = await solcialsProgram.getUserProfile(userPubkey);
+      
+      setUserProfiles(prev => new Map(prev).set(userKey, {
+        username: profile?.username || undefined,
+        displayName: profile?.displayName || undefined
+      }));
+    } catch (error) {
+      console.warn(`Failed to fetch profile for ${userKey}:`, error);
+      setUserProfiles(prev => new Map(prev).set(userKey, {}));
+    }
+  };
+
+  const getUserDisplayName = (userPubkey: PublicKey): string => {
+    const userKey = userPubkey.toString();
+    const profile = userProfiles.get(userKey);
+    
+    if (profile?.displayName) {
+      return profile.displayName;
+    } else if (profile?.username) {
+      return profile.username;
+    }
+    
+    return `${userKey.slice(0, 8)}...${userKey.slice(-4)}`;
+  };
+
+  const getUserHandle = (userPubkey: PublicKey): string | null => {
+    const userKey = userPubkey.toString();
+    const profile = userProfiles.get(userKey);
+    return profile?.username || null;
   };
 
   const formatTimestamp = (timestamp: number) => {
     const date = new Date(timestamp);
-    return date.toLocaleString();
+    const now = new Date();
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) {
+      const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+      return diffInMinutes < 1 ? 'now' : `${diffInMinutes}m`;
+    } else if (diffInHours < 24) {
+      return `${diffInHours}h`;
+    } else {
+      const diffInDays = Math.floor(diffInHours / 24);
+      return diffInDays === 1 ? '1d' : `${diffInDays}d`;
+    }
+  };
+
+  const isFollowing = (address: PublicKey) => {
+    return following.some(addr => addr.equals(address));
+  };
+
+  const handleFollow = async (targetPublicKey: PublicKey) => {
+    if (!wallet.connected || !wallet.publicKey) {
+      alert('Please connect your wallet first');
+      return;
+    }
+
+    if (isRequesting) {
+      alert('Please wait for current request to complete');
+      return;
+    }
+
+    try {
+      setIsRequesting(true);
+      const socialService = new SolcialsCustomProgramService(connection);
+      await socialService.followUser(wallet, targetPublicKey);
+      
+      setFollowing(prev => [...prev, targetPublicKey]);
+      alert('Successfully followed user!');
+    } catch (error) {
+      console.error('Error following user:', error);
+      alert('Failed to follow user. Please try again.');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  const handleUnfollow = async (targetPublicKey: PublicKey) => {
+    if (!wallet.connected || !wallet.publicKey) {
+      alert('Please connect your wallet first');
+      return;
+    }
+
+    if (isRequesting) {
+      alert('Please wait for current request to complete');
+      return;
+    }
+
+    try {
+      setIsRequesting(true);
+      const socialService = new SolcialsCustomProgramService(connection);
+      await socialService.unfollowUser(wallet, targetPublicKey);
+      
+      setFollowing(prev => prev.filter(addr => !addr.equals(targetPublicKey)));
+      alert('Successfully unfollowed user!');
+    } catch (error) {
+      console.error('Error unfollowing user:', error);
+      alert('Failed to unfollow user. Please try again.');
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  const handleUserClick = (address: PublicKey) => {
+    window.location.href = `/wallet/${address.toString()}`;
+  };
+
+  const handleShare = async () => {
+    if (!post) return;
+    const postUrl = `${window.location.origin}/post/${post.signature}`;
+    setShareUrl(postUrl);
+    setShareDialogOpen(true);
+    setCopied(false);
+  };
+
+  const handleLike = async () => {
+    if (!post) return;
+    
+    if (!wallet.connected || !wallet.publicKey) {
+      alert('Please connect your wallet to like posts');
+      return;
+    }
+
+    if (isRequesting) {
+      alert('Please wait for current request to complete');
+      return;
+    }
+
+    const isLiked = likedPosts.has(post.signature);
+
+    try {
+      setIsRequesting(true);
+      const solcialsProgram = new SolcialsCustomProgramService(connection);
+      
+      if (isLiked) {
+        await solcialsProgram.unlikePost(wallet, new PublicKey(post.id));
+        setLikedPosts(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(post.signature);
+          return newSet;
+        });
+        alert('Post unliked!');
+      } else {
+        await solcialsProgram.likePost(wallet, new PublicKey(post.id));
+        setLikedPosts(prev => new Set(prev).add(post.signature));
+        alert('Post liked!');
+      }
+    } catch (error) {
+      console.error('Error liking/unliking post:', error);
+      alert(`Failed to ${isLiked ? 'unlike' : 'like'} post. Please try again.`);
+    } finally {
+      setIsRequesting(false);
+    }
+  };
+
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error('Failed to copy:', error);
+    }
   };
 
   if (loading) {
@@ -122,6 +309,9 @@ export default function PostDetailPage() {
   }
 
   const hasImage = post.imageHash && post.imageUrl;
+  const userHandle = getUserHandle(post.author);
+  const isLiked = likedPosts.has(post.signature);
+  const postContent = post.content;
 
   return (
     <div className="min-h-screen bg-background">
@@ -135,76 +325,134 @@ export default function PostDetailPage() {
           </Link>
         </div>
 
-        <Card className="shadow-sm border">
-          <CardContent className="p-6">
-            <div className="flex items-start space-x-3 mb-4">
-              <Avatar className="h-12 w-12 ring-2 ring-background">
-                <AvatarFallback className="bg-gradient-to-r from-purple-400 to-blue-500 text-white font-bold">
-                  {formatAddress(post.author).slice(0, 2).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <div className="flex items-center space-x-2 mb-1">
-                  <span className="font-semibold text-foreground">
-                    {formatAddress(post.author)}
-                  </span>
-                  {hasImage && (
-                    <Badge variant="outline" className="text-xs">
-                      📸 Image
-                    </Badge>
-                  )}
-                  <Badge variant="outline" className="text-xs bg-purple-50 text-purple-600 dark:bg-purple-950/30 dark:text-purple-400">
-                    Solcials
-                  </Badge>
-                </div>
-                <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                  <Clock className="h-3 w-3" />
-                  <span>{formatTimestamp(post.timestamp)}</span>
-                  <span>•</span>
-                  <span className="text-xs">On-chain</span>
+        {/* Post rendered exactly like in PostList */}
+        <Card className="hover:bg-muted/30 transition-all duration-200 shadow-sm border">
+          <CardContent className="p-3 sm:p-6">
+            <div className="flex justify-between items-start mb-3 sm:mb-4">
+              <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-1 sm:space-x-2">
+                    <button
+                      onClick={() => handleUserClick(post.author)}
+                      className="font-semibold text-foreground hover:text-primary transition-colors text-sm sm:text-base truncate"
+                    >
+                      {getUserDisplayName(post.author)}
+                    </button>
+                    {userHandle && (
+                      <span className="text-xs sm:text-sm text-muted-foreground truncate">
+                        @{userHandle}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm text-muted-foreground mt-1">
+                    <Clock className="h-3 w-3 flex-shrink-0" />
+                    <span className="truncate">{formatTimestamp(post.timestamp)}</span>
+                    <span className="hidden sm:inline">•</span>
+                    <span className="text-xs hidden sm:inline">on chain</span>
+                  </div>
                 </div>
               </div>
+              {wallet.connected && 
+               wallet.publicKey && 
+               !post.author.equals(wallet.publicKey) && (
+                <Button
+                  onClick={() => isFollowing(post.author) ? handleUnfollow(post.author) : handleFollow(post.author)}
+                  size="sm"
+                  variant={isFollowing(post.author) ? "secondary" : "outline"}
+                  className="flex items-center space-x-1 hover:bg-primary hover:text-primary-foreground transition-all ml-2 flex-shrink-0"
+                  disabled={isRequesting}
+                >
+                  <UserPlus className="h-3 w-3 flex-shrink-0" />
+                  <span className="hidden sm:inline">
+                    {isRequesting 
+                      ? (isFollowing(post.author) ? 'Unfollowing...' : 'Following...') 
+                      : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
+                    }
+                  </span>
+                  <span className="sm:hidden text-xs">
+                    {isRequesting 
+                      ? (isFollowing(post.author) ? '...' : '...') 
+                      : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
+                    }
+                  </span>
+                </Button>
+              )}
             </div>
             
             {/* Post Content */}
-            {post.content && (
-              <div className="mb-4">
-                <p className="text-foreground whitespace-pre-wrap leading-relaxed text-lg">
-                  {post.content}
+            {postContent && (
+              <div className="mb-3 sm:mb-4">
+                <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
+                  {postContent}
                 </p>
               </div>
             )}
 
             {/* Post Image */}
             {hasImage && (
-              <div className="mb-4">
-                <div className="rounded-xl overflow-hidden border bg-muted/10">
+              <div className="mb-3 sm:mb-4">
+                <div className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10">
                   <img 
                     src={post.imageUrl} 
                     alt="Post image" 
-                    className="w-full max-h-96 object-cover"
+                    className="w-full max-h-60 sm:max-h-96 object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
+                    onClick={() => window.open(post.imageUrl!, '_blank')}
                   />
                 </div>
                 {post.imageSize && post.imageSize > 0 && (
                   <p className="text-xs text-muted-foreground mt-2 flex items-center">
-                    <ImageIcon className="h-3 w-3 mr-1" />
-                    {(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS
+                    <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
+                    <span className="truncate">{(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS</span>
                   </p>
                 )}
               </div>
             )}
             
-            {/* Post Metadata */}
-            <div className="flex items-center justify-between pt-4 border-t border-border/50">
-              <div className="text-sm text-muted-foreground">
-                Posted on Solcials • Blockchain social media
+            {/* Interaction Bar - exactly like PostList */}
+            <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-border/50">
+              <div className="flex items-center space-x-2 sm:space-x-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2 sm:px-3"
+                >
+                  <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                  <span className="text-xs hidden sm:inline">Reply</span>
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleShare}
+                  className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-8 px-2 sm:px-3"
+                >
+                  <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                  <span className="text-xs hidden sm:inline">Share</span>
+                </Button>
+                
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLike}
+                  className={`transition-all h-8 px-2 sm:px-3 ${
+                    isLiked 
+                      ? 'text-red-500 bg-red-50 dark:bg-red-950/20' 
+                      : 'text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20'
+                  }`}
+                >
+                  <div className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex items-center justify-center">
+                    {isLiked ? '♥' : '♡'}
+                  </div>
+                  <span className="text-xs hidden sm:inline">{isLiked ? 'Unlike' : 'Like'}</span>
+                </Button>
               </div>
-              <div className="flex items-center space-x-2">
+              
+              <div className="flex items-center space-x-1 sm:space-x-2">
                 <Button
                   variant="ghost"
                   size="sm"
                   asChild
-                  className="text-muted-foreground hover:text-primary hover:bg-accent transition-all"
+                  className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-8 px-2 sm:px-3"
                 >
                   <a
                     href={`https://solscan.io/tx/${post.signature}?cluster=devnet`}
@@ -212,19 +460,53 @@ export default function PostDetailPage() {
                     rel="noopener noreferrer"
                     className="flex items-center space-x-1"
                   >
-                    <ExternalLink className="h-3 w-3" />
-                    <span className="text-xs">View TX</span>
+                    <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                    <span className="text-xs hidden sm:inline">View TX</span>
                   </a>
                 </Button>
-                
-                <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                  Blockchain
-                </Badge>
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Share Dialog - exactly like PostList */}
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="max-w-[95vw] sm:max-w-md mx-2 sm:mx-4">
+          <DialogHeader>
+            <DialogTitle>Share Post</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Copy this link to share the post:
+            </p>
+            <div className="flex items-center space-x-2">
+              <Input
+                value={shareUrl}
+                readOnly
+                className="flex-1 text-sm"
+              />
+              <Button
+                onClick={copyToClipboard}
+                size="sm"
+                className="flex items-center space-x-1 flex-shrink-0"
+              >
+                {copied ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    <span>Copy</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

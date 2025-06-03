@@ -28,7 +28,8 @@ export default function Home() {
     
     if (heliusApiKey) {
       // Use WebSocket for real-time updates with Helius
-      console.log('🚀 Using WebSocket live updates with Helius');
+      console.log('🚀 Initializing WebSocket live updates with Helius');
+      
       const service = createWebSocketLiveUpdateService(
         (newPosts: SocialPost[]) => {
           console.log('📢 New posts received via WebSocket:', newPosts.length);
@@ -36,10 +37,14 @@ export default function Home() {
         }
       );
       
-      service.start();
+      // Start service with a small delay to ensure component is mounted
+      const startTimeout = setTimeout(() => {
+        service.start();
+      }, 100);
 
       return () => {
-        console.log('🧹 Cleaning up WebSocket service...');
+        console.log('🧹 Cleaning up WebSocket service on page unmount...');
+        clearTimeout(startTimeout);
         service.stop();
       };
     } else {
@@ -60,7 +65,7 @@ export default function Home() {
         service.stop();
       };
     }
-  }, []); // Remove connection dependency to prevent recreation
+  }, []); // Keep empty dependency array to prevent recreation
 
   const handlePostCreated = () => {
     setRefreshTrigger(prev => prev + 1);
