@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
       : post.content;
 
     const title = `${authorDisplayName} ${authorUsername}`;
-    const siteName = 'solcials';
+    const siteName = 'solcials - post';
     const postUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/post/${signature}`;
 
     return {

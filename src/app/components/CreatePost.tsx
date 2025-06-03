@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Send, Loader2, MessageSquarePlus, Image as ImageIcon, MapPin, Smile, X, Upload } from 'lucide-react';
 import Image from 'next/image';
 
