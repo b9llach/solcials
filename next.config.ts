@@ -25,7 +25,12 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
-    domains: ['gateway.lighthouse.storage'],
+    remotePatterns: [
+      {
+      protocol: 'https',
+      hostname: 'gateway.lighthouse.storage',
+    },
+  ],
   },
 };
 
