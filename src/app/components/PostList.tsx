@@ -292,17 +292,17 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   if (loading) {
     return (
-      <div className="space-y-4 p-4">
+      <div className="space-y-3 sm:space-y-4 p-2 sm:p-4">
         {[...Array(3)].map((_, i) => (
           <Card key={i}>
-            <CardContent className="p-6">
-              <div className="flex items-start space-x-4">
-                <Skeleton className="h-10 w-10 rounded-full" />
+            <CardContent className="p-3 sm:p-6">
+              <div className="flex items-start space-x-2 sm:space-x-4">
+                <Skeleton className="h-8 w-8 sm:h-10 sm:w-10 rounded-full" />
                 <div className="flex-1 space-y-2">
-                  <Skeleton className="h-4 w-32" />
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-4 w-40" />
+                  <Skeleton className="h-3 sm:h-4 w-24 sm:w-32" />
+                  <Skeleton className="h-3 sm:h-4 w-16 sm:w-20" />
+                  <Skeleton className="h-12 sm:h-16 w-full" />
+                  <Skeleton className="h-3 sm:h-4 w-32 sm:w-40" />
                 </div>
               </div>
             </CardContent>
@@ -314,10 +314,10 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   if (posts.length === 0) {
     return (
-      <Card className="m-4">
-        <CardContent className="p-8 text-center">
-          <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground">
+      <Card className="m-2 sm:m-4">
+        <CardContent className="p-4 sm:p-8 text-center">
+          <MessageSquare className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-sm sm:text-base text-muted-foreground">
             {userFilter 
               ? 'This user has not posted anything yet.' 
               : feedType === 'following' 
@@ -346,10 +346,10 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   if (userFilter && filteredPosts.length === 0 && posts.length > 0) {
     return (
-      <Card className="m-4">
-        <CardContent className="p-8 text-center">
-          <MessageSquare className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <p className="text-muted-foreground">This user hasn&apos;t posted anything yet.</p>
+      <Card className="m-2 sm:m-4">
+        <CardContent className="p-4 sm:p-8 text-center">
+          <MessageSquare className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-sm sm:text-base text-muted-foreground">This user hasn&apos;t posted anything yet.</p>
         </CardContent>
       </Card>
     );
@@ -357,11 +357,11 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   if (feedType === 'following' && filteredPosts.length === 0 && posts.length > 0) {
     return (
-      <Card className="m-4">
-        <CardContent className="p-8 text-center">
-          <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-medium mb-2">No posts from following</h3>
-          <p className="text-muted-foreground">
+      <Card className="m-2 sm:m-4">
+        <CardContent className="p-4 sm:p-8 text-center">
+          <Users className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-4 text-muted-foreground" />
+          <h3 className="text-base sm:text-lg font-medium mb-2">No posts from following</h3>
+          <p className="text-sm text-muted-foreground">
             Start following some users to see their posts here!
           </p>
         </CardContent>
@@ -371,7 +371,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   return (
     <>
-      <div className="space-y-4 p-4">
+      <div className="space-y-3 sm:space-y-4 p-2 sm:p-4">
         {filteredPosts.map((post) => {
           // Posts are now pre-filtered and parsed by the service
           const postContent = post.content;
@@ -426,28 +426,28 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
           return (
             <Card key={post.signature} className="hover:bg-muted/30 transition-all duration-200 shadow-sm border">
-              <CardContent className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="flex-1">
-                      <div className="flex items-center space-x-2">
+              <CardContent className="p-3 sm:p-6">
+                <div className="flex justify-between items-start mb-3 sm:mb-4">
+                  <div className="flex items-center space-x-2 sm:space-x-3 min-w-0 flex-1">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center space-x-1 sm:space-x-2">
                         <button
                           onClick={() => handleUserClick(post.author)}
-                          className="font-semibold text-foreground hover:text-primary transition-colors"
+                          className="font-semibold text-foreground hover:text-primary transition-colors text-sm sm:text-base truncate"
                         >
                           {getUserDisplayName(post.author)}
                         </button>
                         {userHandle && (
-                          <span className="text-sm text-muted-foreground">
+                          <span className="text-xs sm:text-sm text-muted-foreground truncate">
                             @{userHandle}
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center space-x-2 text-sm text-muted-foreground mt-1">
-                        <Clock className="h-3 w-3" />
-                        <span>{formatTimestamp(post.timestamp)}</span>
-                        <span>•</span>
-                        <span className="text-xs">on chain</span>
+                      <div className="flex items-center space-x-1 sm:space-x-2 text-xs sm:text-sm text-muted-foreground mt-1">
+                        <Clock className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{formatTimestamp(post.timestamp)}</span>
+                        <span className="hidden sm:inline">•</span>
+                        <span className="text-xs hidden sm:inline">on chain</span>
                       </div>
                     </div>
                   </div>
@@ -458,13 +458,19 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
                       onClick={() => isFollowing(post.author) ? handleUnfollow(post.author) : handleFollow(post.author)}
                       size="sm"
                       variant={isFollowing(post.author) ? "secondary" : "outline"}
-                      className="flex items-center space-x-1 hover:bg-primary hover:text-primary-foreground transition-all"
+                      className="flex items-center space-x-1 hover:bg-primary hover:text-primary-foreground transition-all ml-2 flex-shrink-0"
                       disabled={isRequesting}
                     >
-                      <UserPlus className="h-3 w-3" />
-                      <span>
+                      <UserPlus className="h-3 w-3 flex-shrink-0" />
+                      <span className="hidden sm:inline">
                         {isRequesting 
                           ? (isFollowing(post.author) ? 'Unfollowing...' : 'Following...') 
+                          : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
+                        }
+                      </span>
+                      <span className="sm:hidden text-xs">
+                        {isRequesting 
+                          ? (isFollowing(post.author) ? '...' : '...') 
                           : (isFollowing(post.author) ? 'Unfollow' : 'Follow')
                         }
                       </span>
@@ -474,8 +480,8 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
                 
                 {/* Post Content */}
                 {postContent && (
-                  <div className="mb-4">
-                    <p className="text-foreground whitespace-pre-wrap leading-relaxed text-base">
+                  <div className="mb-3 sm:mb-4">
+                    <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
                       {postContent}
                     </p>
                   </div>
@@ -483,69 +489,69 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
                 {/* Post Image */}
                 {hasImage && (
-                  <div className="mb-4">
-                    <div className="rounded-xl overflow-hidden border bg-muted/10">
+                  <div className="mb-3 sm:mb-4">
+                    <div className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10">
                       <img 
                         src={post.imageUrl} 
                         alt="Post image" 
-                        className="w-full max-h-96 object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
+                        className="w-full max-h-60 sm:max-h-96 object-cover hover:scale-105 transition-transform duration-300 cursor-pointer"
                         onClick={() => window.open(post.imageUrl!, '_blank')}
                       />
                     </div>
                     {post.imageSize && post.imageSize > 0 && (
                       <p className="text-xs text-muted-foreground mt-2 flex items-center">
-                        <ImageIcon className="h-3 w-3 mr-1" />
-                        {(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS
+                        <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
+                        <span className="truncate">{(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS</span>
                       </p>
                     )}
                   </div>
                 )}
                 
                 {/* Interaction Bar */}
-                <div className="flex items-center justify-between pt-4 border-t border-border/50">
-                  <div className="flex items-center space-x-4">
+                <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-border/50">
+                  <div className="flex items-center space-x-2 sm:space-x-4">
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all"
+                      className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2 sm:px-3"
                     >
-                      <MessageSquare className="h-4 w-4 mr-1" />
-                      <span className="text-xs">Reply</span>
+                      <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                      <span className="text-xs hidden sm:inline">Reply</span>
                     </Button>
                     
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={handleShare}
-                      className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all"
+                      className="text-muted-foreground hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-950/20 transition-all h-8 px-2 sm:px-3"
                     >
-                      <ExternalLink className="h-4 w-4 mr-1" />
-                      <span className="text-xs">Share</span>
+                      <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                      <span className="text-xs hidden sm:inline">Share</span>
                     </Button>
                     
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={handleLike}
-                      className={`transition-all ${
+                      className={`transition-all h-8 px-2 sm:px-3 ${
                         isLiked 
                           ? 'text-red-500 bg-red-50 dark:bg-red-950/20' 
                           : 'text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20'
                       }`}
                     >
-                      <div className="h-4 w-4 mr-1 flex items-center justify-center">
+                      <div className="h-3 w-3 sm:h-4 sm:w-4 mr-1 flex items-center justify-center">
                         {isLiked ? '♥' : '♡'}
                       </div>
-                      <span className="text-xs">{isLiked ? 'Unlike' : 'Like'}</span>
+                      <span className="text-xs hidden sm:inline">{isLiked ? 'Unlike' : 'Like'}</span>
                     </Button>
                   </div>
                   
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-1 sm:space-x-2">
                     <Button
                       variant="ghost"
                       size="sm"
                       asChild
-                      className="text-muted-foreground hover:text-primary hover:bg-accent transition-all"
+                      className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-8 px-2 sm:px-3"
                     >
                       <a
                         href={`https://solscan.io/tx/${post.signature}?cluster=devnet`}
@@ -553,8 +559,8 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
                         rel="noopener noreferrer"
                         className="flex items-center space-x-1"
                       >
-                        <ExternalLink className="h-3 w-3" />
-                        <span className="text-xs">View TX</span>
+                        <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                        <span className="text-xs hidden sm:inline">View TX</span>
                       </a>
                     </Button>
 
@@ -589,7 +595,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
       {/* Share Dialog */}
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md mx-2 sm:mx-4">
           <DialogHeader>
             <DialogTitle>Share Post</DialogTitle>
           </DialogHeader>
@@ -606,17 +612,17 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
               <Button
                 onClick={copyToClipboard}
                 size="sm"
-                className="flex items-center space-x-1"
+                className="flex items-center space-x-1 flex-shrink-0"
               >
                 {copied ? (
                   <>
                     <Check className="h-4 w-4" />
-                    <span>Copied!</span>
+                    <span className="hidden sm:inline">Copied!</span>
                   </>
                 ) : (
                   <>
                     <Copy className="h-4 w-4" />
-                    <span>Copy</span>
+                    <span className="hidden sm:inline">Copy</span>
                   </>
                 )}
               </Button>

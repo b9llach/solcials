@@ -6,7 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "network:devnet": "node scripts/switch-network.js devnet",
+    "network:mainnet": "node scripts/switch-network.js mainnet",
+    "network:testnet": "node scripts/switch-network.js testnet",
+    "network:status": "node scripts/network-status.js"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.29.0",

@@ -6,18 +6,15 @@ import {
   SystemProgram
 } from '@solana/web3.js';
 import { SocialPost } from '../types/social';
+import { getProgramId, getPlatformTreasury } from './networkConfig';
 import * as anchor from '@coral-xyz/anchor';
 import { sha256 } from 'js-sha256';
 
 // Your custom Solcials program ID from deployment
-const SOLCIALS_PROGRAM_ID = new PublicKey(
-  process.env.NEXT_PUBLIC_SOLCIALS_PROGRAM_ID || '2dMkuyNN2mUiSWyW1UGTRE7CkfULpudVdMCbASCChLpv'
-);
+const SOLCIALS_PROGRAM_ID = new PublicKey(getProgramId());
 
 // Platform treasury for collecting fees - use environment variable
-const PLATFORM_TREASURY = new PublicKey(
-  process.env.NEXT_PUBLIC_PLATFORM_TREASURY || 'DpfkoSVQNmh3XS2JgzU39nMHMqz9VH7ag2447GkRt8va'
-);
+const PLATFORM_TREASURY = new PublicKey(getPlatformTreasury());
 
 // Anchor instruction discriminators (8-byte SHA256 hash of "global:function_name")
 const INSTRUCTION_DISCRIMINATORS = {

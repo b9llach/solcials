@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { PublicKey } from '@solana/web3.js';
 import { SolcialsCustomProgramService } from '../utils/solcialsProgram';
+import { useUserProfile } from '../hooks/useUserProfile';
 import { SocialPost } from '../types/social';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,30 +34,18 @@ import {
   Clock
 } from 'lucide-react';
 
-interface UserProfile {
-  user: PublicKey;
-  username?: string;
-  displayName?: string;
-  bio?: string;
-  websiteUrl?: string;
-  location?: string;
-  followersCount: number;
-  followingCount: number;
-  postCount: number;
-  createdAt: number;
-  verified: boolean;
-}
-
 export default function ProfilePage() {
   const { publicKey, connected, signTransaction } = useWallet();
   const { connection } = useConnection();
+  const { 
+    profile, 
+    loading, 
+    updateProfile
+  } = useUserProfile();
   
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [actualPostCount, setActualPostCount] = useState(0);
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({});
   const [followersData, setFollowersData] = useState<PublicKey[]>([]);
   const [followingData, setFollowingData] = useState<PublicKey[]>([]);
@@ -75,13 +64,18 @@ export default function ProfilePage() {
     location: ''
   });
 
+  // Initialize edit form when profile loads
   useEffect(() => {
-    if (connected && publicKey) {
-      loadProfile();
-    } else {
-      setLoading(false);
+    if (profile) {
+      setEditForm({
+        username: profile.username || '',
+        displayName: profile.displayName || '',
+        bio: profile.bio || '',
+        websiteUrl: profile.websiteUrl || '',
+        location: profile.location || ''
+      });
     }
-  }, [connected, publicKey]);
+  }, [profile]);
 
   // Fetch user profiles for liked posts
   useEffect(() => {
@@ -89,112 +83,6 @@ export default function ProfilePage() {
       fetchUserProfile(post.author);
     });
   }, [likedPosts]);
-
-  const loadProfile = async () => {
-    if (!publicKey) return;
-    
-    try {
-      setLoading(true);
-      const solcialsProgram = new SolcialsCustomProgramService(connection);
-      
-      // Get actual post count
-      const allPosts = await solcialsProgram.getPosts(100);
-      const userPosts = allPosts.filter(post => post.author.equals(publicKey));
-      const userPostCount = userPosts.length;
-      setActualPostCount(userPostCount);
-      
-      // Try to get user profile from custom program
-      const userProfile = await solcialsProgram.getUserProfile(publicKey);
-      
-      if (userProfile) {
-        // Convert to local interface format
-        const profileData: UserProfile = {
-          user: userProfile.user,
-          username: userProfile.username ?? undefined,
-          displayName: userProfile.displayName ?? undefined,
-          bio: userProfile.bio ?? undefined,
-          websiteUrl: userProfile.websiteUrl ?? undefined,
-          location: userProfile.location ?? undefined,
-          followersCount: Number(userProfile.followersCount),
-          followingCount: Number(userProfile.followingCount),
-          postCount: userPostCount, // Use actual count
-          createdAt: Number(userProfile.createdAt),
-          verified: userProfile.verified
-        };
-        
-        setProfile(profileData);
-        setEditForm({
-          username: profileData.username ?? '',
-          displayName: profileData.displayName ?? '',
-          bio: profileData.bio ?? '',
-          websiteUrl: profileData.websiteUrl ?? '',
-          location: profileData.location ?? ''
-        });
-      } else {
-        // User hasn't created a profile yet, create default
-        const defaultProfile: UserProfile = {
-          user: publicKey,
-          username: undefined,
-          displayName: 'Anonymous User',
-          bio: '',
-          websiteUrl: '',
-          location: '',
-          followersCount: 0,
-          followingCount: 0,
-          postCount: userPostCount,
-          createdAt: Date.now(),
-          verified: false
-        };
-        
-        setProfile(defaultProfile);
-        setEditForm({
-          username: '',
-          displayName: '',
-          bio: '',
-          websiteUrl: '',
-          location: ''
-        });
-      }
-    } catch (error) {
-      console.warn('Error loading profile (creating fallback):', error);
-      
-      // Create fallback profile with actual post count
-      try {
-        const solcialsProgram = new SolcialsCustomProgramService(connection);
-        const allPosts = await solcialsProgram.getPosts(100);
-        const userPosts = allPosts.filter(post => post.author.equals(publicKey));
-        const userPostCount = userPosts.length;
-        setActualPostCount(userPostCount);
-        
-        const fallbackProfile: UserProfile = {
-          user: publicKey,
-          username: undefined,
-          displayName: 'Anonymous User',
-          bio: '',
-          websiteUrl: '',
-          location: '',
-          followersCount: 0,
-          followingCount: 0,
-          postCount: userPostCount,
-          createdAt: Date.now(),
-          verified: false
-        };
-        setProfile(fallbackProfile);
-        setEditForm({
-          username: '',
-          displayName: 'Anonymous User',
-          bio: '',
-          websiteUrl: '',
-          location: ''
-        });
-      } catch (postError) {
-        console.error('Error getting posts for fallback:', postError);
-        setActualPostCount(0);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const validateUsername = (username: string): string | null => {
     if (!username) return null; // Username is optional
@@ -260,13 +148,17 @@ export default function ProfilePage() {
         editForm.location || undefined
       );
       
+      // Update local cache immediately with the new data
+      updateProfile({
+        username: editForm.username || undefined,
+        displayName: editForm.displayName || undefined,
+        bio: editForm.bio || undefined,
+        websiteUrl: editForm.websiteUrl || undefined,
+        location: editForm.location || undefined
+      });
+      
       setEditing(false);
       setValidationErrors({});
-      
-      // Wait a bit for the transaction to be processed before reloading
-      setTimeout(async () => {
-        await loadProfile();
-      }, 2000);
       
       // Success message
       const successMsg = document.createElement('div');
@@ -633,7 +525,7 @@ export default function ProfilePage() {
               <MessageSquare className="h-4 w-4" />
               <span>posts</span>
               <Badge variant="secondary" className="text-xs">
-                {actualPostCount}
+                {profile?.postCount || 0}
               </Badge>
             </TabsTrigger>
             <TabsTrigger value="likes" onClick={() => !loadingLikes && likedPosts.length === 0 && loadLikedPosts()}>

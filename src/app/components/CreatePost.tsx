@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { SolcialsCustomProgramService } from '../utils/solcialsProgram';
+import { useUserProfile } from '../hooks/useUserProfile';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -27,6 +28,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
   
   const { connection } = useConnection();
   const wallet = useWallet();
+  const { loading: profileLoading, getDisplayName, getUsername } = useUserProfile();
 
   useEffect(() => {
     setMounted(true);
@@ -155,10 +157,6 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
     }
   };
 
-  const formatAddress = (address: string) => {
-    return `${address.slice(0, 4)}...${address.slice(-4)}`;
-  };
-
   const remainingChars = 280 - content.length;
   const isOverLimit = remainingChars < 0;
 
@@ -205,6 +203,23 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
     );
   }
 
+  // Generate avatar initials from display name or address
+  const getAvatarInitials = () => {
+    const displayName = getDisplayName();
+    
+    // If it's a wallet address format, use the first 2 chars
+    if (displayName.includes('...')) {
+      return displayName.slice(0, 2).toUpperCase();
+    }
+    
+    // Otherwise, use first letter of each word, max 2 chars
+    const words = displayName.split(' ');
+    if (words.length >= 2) {
+      return (words[0][0] + words[1][0]).toUpperCase();
+    }
+    return displayName.slice(0, 2).toUpperCase();
+  };
+
   return (
     <div className="space-y-4">
       <Card className="shadow-sm">
@@ -212,14 +227,28 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
           <div className="flex items-center space-x-3">
             <Avatar className="h-10 w-10 ring-2 ring-primary/10">
               <AvatarFallback className="bg-gradient-to-r from-purple-500 to-blue-500 text-white font-bold">
-                {formatAddress(wallet.publicKey?.toString() || '').slice(0, 2).toUpperCase()}
+                {getAvatarInitials()}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
               <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium">
-                  {formatAddress(wallet.publicKey?.toString() || '')}
-                </span>
+                {profileLoading ? (
+                  <div className="flex items-center space-x-2">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    <span className="text-sm font-medium text-muted-foreground">loading...</span>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-sm font-medium">
+                      {getDisplayName()}
+                    </span>
+                    {getUsername() && (
+                      <span className="text-xs text-muted-foreground">
+                        @{getUsername()}
+                      </span>
+                    )}
+                  </>
+                )}
                 <Badge variant="secondary" className="text-xs">
                   <div className="h-2 w-2 bg-green-500 rounded-full mr-1" />
                   online

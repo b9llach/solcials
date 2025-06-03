@@ -15,6 +15,64 @@ A fully decentralized social media platform built on Solana blockchain where all
 - **Modern UI**: Built with shadcn/ui components for a professional look
 - **Rate Limiting Protection**: Smart retry logic to handle RPC rate limits
 
+## 🌐 Network Configuration
+
+Solcials supports multiple Solana networks through environment variables. You can easily switch between devnet, testnet, and mainnet.
+
+### Quick Network Setup
+
+```bash
+# Set up for devnet (recommended for development)
+npm run network:devnet
+
+# Switch to mainnet (for production)
+npm run network:mainnet
+
+# Switch to testnet
+npm run network:testnet
+
+# Check current network status
+npm run network:status
+```
+
+### Manual Configuration
+
+Create a `.env.local` file based on `env.example`:
+
+```bash
+# Copy the example file
+cp env.example .env.local
+```
+
+Configure your environment variables:
+
+```env
+# Set to 'mainnet-beta', 'devnet', or 'testnet'
+NEXT_PUBLIC_SOLANA_NETWORK=devnet
+
+# Optional: Custom RPC URLs for better performance
+NEXT_PUBLIC_MAINNET_RPC_URL=https://your-mainnet-rpc.com
+NEXT_PUBLIC_DEVNET_RPC_URL=https://your-devnet-rpc.com
+
+# Optional: Helius API key for enhanced performance
+NEXT_PUBLIC_HELIUS=your-helius-api-key
+
+# Program ID (update if you deploy to different networks)
+NEXT_PUBLIC_SOLCIALS_PROGRAM_ID=2dMkuyNN2mUiSWyW1UGTRE7CkfULpudVdMCbASCChLpv
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `NEXT_PUBLIC_SOLANA_NETWORK` | Target network (`mainnet-beta`, `devnet`, `testnet`) | `devnet` |
+| `NEXT_PUBLIC_MAINNET_RPC_URL` | Custom mainnet RPC endpoint | Public RPC |
+| `NEXT_PUBLIC_DEVNET_RPC_URL` | Custom devnet RPC endpoint | Public RPC |
+| `NEXT_PUBLIC_TESTNET_RPC_URL` | Custom testnet RPC endpoint | Public RPC |
+| `NEXT_PUBLIC_HELIUS` | Helius API key for better performance | - |
+| `NEXT_PUBLIC_SOLCIALS_PROGRAM_ID` | Your deployed program ID | Default devnet ID |
+| `NEXT_PUBLIC_PLATFORM_TREASURY` | Platform treasury wallet | Default treasury |
+
 ## 🚀 How It Works
 
 This application uses an innovative approach to create a social media platform without any centralized database:

@@ -1,5 +1,6 @@
 import { SocialPost } from '../types/social';
 import { PublicKey } from '@solana/web3.js';
+import { getWebSocketEndpoint, getNetworkConfig, getProgramId } from './networkConfig';
 
 export interface WebSocketLiveUpdateOptions {
   onNewPosts: (newPosts: SocialPost[]) => void;
@@ -34,19 +35,18 @@ interface TransactionData {
 
 // Program IDs
 const MEMO_PROGRAM_ID = 'MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr';
-const SOLCIALS_PROGRAM_ID = '2dMkuyNN2mUiSWyW1UGTRE7CkfULpudVdMCbASCChLpv'; // Your current deployed program
 
 export class WebSocketLiveUpdateService {
   private ws: WebSocket | null = null;
   private onNewPosts: (newPosts: SocialPost[]) => void;
   private onError: (error: Error) => void;
-  private enabled: boolean = false;
+  private enabled: boolean = true;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   private lastPostTimestamp: number = 0;
-  private subscriptionId: number | null = null;
+  private subscriptionId: string | null = null;
   private isConnecting = false;
 
   constructor(options: WebSocketLiveUpdateOptions) {
@@ -61,25 +61,22 @@ export class WebSocketLiveUpdateService {
       return;
     }
 
-    const heliusApiKey = process.env.NEXT_PUBLIC_HELIUS;
-    if (!heliusApiKey) {
-      console.warn('⚠️ Helius API key not found, cannot start WebSocket live updates');
-      this.onError(new Error('Helius API key not configured'));
+    const wsEndpoint = getWebSocketEndpoint();
+    if (!wsEndpoint) {
+      console.warn('⚠️ WebSocket endpoint not available, cannot start live updates');
       return;
     }
 
-    console.log('🚀 Starting WebSocket live updates with Helius on devnet...');
+    const networkConfig = getNetworkConfig();
+    console.log(`🚀 Starting WebSocket live updates on ${networkConfig.displayName}...`);
     
     this.isConnecting = true;
     
     try {
-      // Use devnet since our program is deployed there
-      const wsUrl = `wss://devnet.helius-rpc.com/?api-key=${heliusApiKey}`;
-      
-      this.ws = new WebSocket(wsUrl);
+      this.ws = new WebSocket(wsEndpoint);
       
       this.ws.onopen = () => {
-        console.log('✅ WebSocket connected to Helius devnet');
+        console.log(`✅ WebSocket connected to ${networkConfig.displayName}`);
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         this.startPing();
@@ -108,17 +105,13 @@ export class WebSocketLiveUpdateService {
       };
 
       this.ws.onerror = (error) => {
-        console.warn('⚠️ WebSocket connection issue (this is normal during navigation):', error);
+        console.error('WebSocket error:', error);
         this.isConnecting = false;
-        // Don't call onError for navigation-related disconnections
-        if (this.enabled && this.reconnectAttempts === 0) {
-          this.onError(new Error('WebSocket connection error'));
-        }
       };
+
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);
       this.isConnecting = false;
-      this.onError(error as Error);
     }
   }
 
@@ -191,26 +184,29 @@ export class WebSocketLiveUpdateService {
       return;
     }
 
-    // Subscribe to logs that mention both the Memo program and your custom Solcials program
-    const subscribeRequest = {
-      jsonrpc: "2.0",
-      id: 1,
-      method: "logsSubscribe",
-      params: [
-        {
-          mentions: [
-            MEMO_PROGRAM_ID,      // Current implementation using Memo
-            SOLCIALS_PROGRAM_ID   // Your custom program for future use
-          ]
-        },
-        {
-          commitment: "confirmed"
-        }
-      ]
-    };
+    const programId = getProgramId();
+    
+    try {
+      const subscribeMessage = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'programSubscribe',
+        params: [
+          programId,
+          {
+            encoding: 'jsonParsed',
+            filters: [],
+            commitment: 'confirmed'
+          }
+        ]
+      };
 
-    console.log('📡 Subscribing to Solcials program transactions (memo + custom)...');
-    this.ws.send(JSON.stringify(subscribeRequest));
+      console.log(`📡 Subscribing to Solcials program: ${programId}`);
+      this.ws.send(JSON.stringify(subscribeMessage));
+      
+    } catch (error) {
+      console.error('Failed to subscribe to program:', error);
+    }
   }
 
   private handleMessage(event: MessageEvent) {
@@ -219,7 +215,7 @@ export class WebSocketLiveUpdateService {
 
       // Handle subscription confirmation
       if (message.result && typeof message.result === 'number') {
-        this.subscriptionId = message.result;
+        this.subscriptionId = message.result.toString();
         console.log(`✅ Subscribed to logs with ID: ${this.subscriptionId}`);
         return;
       }
@@ -277,9 +273,9 @@ export class WebSocketLiveUpdateService {
 
   private async getTransactionDetails(signature: string): Promise<TransactionData | null> {
     try {
-      const heliusApiKey = process.env.NEXT_PUBLIC_HELIUS;
-      // Use devnet RPC endpoint since our program is deployed there
-      const response = await fetch(`https://devnet.helius-rpc.com/?api-key=${heliusApiKey}`, {
+      const networkConfig = getNetworkConfig();
+      
+      const response = await fetch(networkConfig.endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -318,7 +314,7 @@ export class WebSocketLiveUpdateService {
 
       // Then, try to find custom Solcials program instruction (future implementation)
       const solcialsInstruction = instructions.find((ix: TransactionInstruction) => 
-        ix.programId === SOLCIALS_PROGRAM_ID
+        ix.programId === getProgramId()
       );
 
       let postData: { app?: string; content?: string; imageHash?: string; imageUrl?: string; imageSize?: number };

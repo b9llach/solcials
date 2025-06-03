@@ -72,27 +72,29 @@ export default function Home() {
       <Header />
       
       <div className="flex-1 flex overflow-hidden">
-        <div className="container mx-auto px-4 max-w-2xl flex h-full">
+        <div className="container mx-auto px-2 sm:px-4 max-w-2xl flex h-full">
           {/* Main Feed - Full width Twitter-like layout */}
           <main className="flex-1 flex flex-col border-x border-border/50 min-w-0">
             {/* Feed Tabs */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <div className="border-b border-border/50 sticky top-0 bg-background/95 backdrop-blur z-10">
-                <TabsList className="grid w-full grid-cols-2 h-12 bg-transparent border-0 rounded-none">
+                <TabsList className="grid w-full grid-cols-2 h-11 sm:h-12 bg-transparent border-0 rounded-none">
                   <TabsTrigger 
                     value="all" 
-                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent text-xs sm:text-sm"
                   >
-                    <Globe className="h-4 w-4 mr-2" />
-                    all posts
+                    <Globe className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">all posts</span>
+                    <span className="sm:hidden">all</span>
                   </TabsTrigger>
                   <TabsTrigger 
                     value="following" 
-                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent"
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none bg-transparent text-xs sm:text-sm"
                     disabled={!connected}
                   >
-                    <Users className="h-4 w-4 mr-2" />
-                    following
+                    <Users className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                    <span className="hidden sm:inline">following</span>
+                    <span className="sm:hidden">following</span>
                   </TabsTrigger>
                 </TabsList>
               </div>
@@ -110,10 +112,10 @@ export default function Home() {
                   {connected && publicKey ? (
                     <PostList refreshTrigger={refreshTrigger} feedType="following" />
                   ) : (
-                    <div className="p-8 text-center">
-                      <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                      <h3 className="text-lg font-medium mb-2">connect to see following</h3>
-                      <p className="text-muted-foreground">
+                    <div className="p-4 sm:p-8 text-center">
+                      <Users className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-4 text-muted-foreground" />
+                      <h3 className="text-base sm:text-lg font-medium mb-2">connect to see following</h3>
+                      <p className="text-sm text-muted-foreground">
                         connect your wallet to see posts from people you follow
                       </p>
                     </div>
@@ -125,18 +127,18 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Floating Action Button - Bigger and bolder + */}
+      {/* Floating Action Button - Mobile optimized */}
       {connected && (
         <Dialog open={showMobileComposer} onOpenChange={setShowMobileComposer}>
           <DialogTrigger asChild>
             <Button
               size="lg"
-              className="fixed bottom-6 right-6 h-16 w-16 rounded-full shadow-lg z-40"
+              className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 h-14 w-14 sm:h-16 sm:w-16 rounded-full shadow-lg z-40 hover:scale-105 transition-transform"
             >
-              <NotebookPenIcon className="h-10 w-10 font-bold stroke-[3]" />
+              <NotebookPenIcon className="h-6 w-6 sm:h-8 sm:w-8 font-bold stroke-[2.5] sm:stroke-[3]" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-md mx-4 max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[90vh] sm:max-h-[80vh] overflow-y-auto">
             <DialogTitle className="sr-only">create new post</DialogTitle>
             <CreatePost onPostCreated={handlePostCreated} />
           </DialogContent>
