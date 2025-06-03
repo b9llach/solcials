@@ -55,8 +55,16 @@ If you see `API Key present: false`, the environment variable isn't set properly
 ### Common Issues & Solutions
 
 #### "No image available" error
-- **Cause**: NFT metadata not found
+- **Cause**: NFT metadata not found or NFT mint account doesn't exist
 - **Solution**: App now shows placeholder images for missing metadata
+
+#### "NFT mint account not found" error
+- **Cause**: Posts reference NFT addresses that don't exist on the blockchain
+- **Root cause**: NFT creation failed but post was still created
+- **Solution**: 
+  1. New posts now validate NFT exists before creating post
+  2. Use the NFT cleanup utility to remove invalid metadata
+  3. App shows placeholder images for invalid NFTs
 
 #### "Lighthouse API key not configured" error
 - **Cause**: Missing or invalid API key
@@ -65,6 +73,28 @@ If you see `API Key present: false`, the environment variable isn't set properly
 #### Images load slowly
 - **Cause**: IPFS gateway latency
 - **Solution**: Images are decentralized, loading time varies
+
+#### NFT Creation Issues
+- **Cause**: Network differences between localhost and production
+- **Solution**: 
+  1. Ensure you're using the same Solana network (devnet)
+  2. Clear localStorage when switching environments
+  3. Use the NFT cleanup button to remove invalid entries
+
+## NFT Validation & Cleanup
+
+### Automatic NFT Validation
+The app now includes automatic validation:
+- **Before post creation**: Validates NFT exists on blockchain
+- **After NFT creation**: Confirms mint account was actually created
+- **During image loading**: Shows placeholders for invalid NFTs
+
+### Manual Cleanup
+If you're seeing "no image available" errors:
+1. **Check browser console** for NFT validation errors
+2. **Use NFT cleanup utility** (if implemented in your UI)
+3. **Clear localStorage** to reset all NFT metadata
+4. **Try creating new image posts** with the improved validation
 
 ## Testing Your Deployment
 

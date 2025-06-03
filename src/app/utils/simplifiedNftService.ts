@@ -137,6 +137,19 @@ export class SimplifiedNFTService {
       console.log('⏳ Confirming NFT creation...');
       await this.connection.confirmTransaction(signature, 'confirmed');
 
+      // Step 6.5: VALIDATE NFT WAS ACTUALLY CREATED
+      console.log('🔍 Validating NFT was successfully created on blockchain...');
+      const mintAccountInfo = await this.connection.getAccountInfo(mintAccount);
+      if (!mintAccountInfo) {
+        throw new Error(`NFT creation failed: Mint account ${mintAccount.toString()} was not created despite transaction confirmation`);
+      }
+      
+      if (mintAccountInfo.data.length !== 82) {
+        throw new Error(`NFT creation failed: Invalid mint account data length (${mintAccountInfo.data.length} bytes, expected 82)`);
+      }
+      
+      console.log('✅ NFT validation passed: Mint account exists and is valid');
+
       console.log('🎉 NFT created successfully!');
       console.log('🪙 NFT Address:', mintAccount.toString());
       console.log('📄 Transaction:', signature);
@@ -260,13 +273,86 @@ export class SimplifiedNFTService {
     `)}`;
   }
 
-  // Check if an NFT exists
+  // Check if an NFT exists and is valid
   async nftExists(mintAddress: PublicKey): Promise<boolean> {
     try {
       const accountInfo = await this.connection.getAccountInfo(mintAddress);
-      return accountInfo !== null;
+      
+      // Check if account exists and has the correct size for a mint account
+      if (!accountInfo || accountInfo.data.length !== 82) {
+        return false;
+      }
+      
+      // Additional validation: check if it's actually a mint account
+      // Mint accounts have specific data structure and are owned by the Token Program
+      if (!accountInfo.owner.equals(TOKEN_PROGRAM_ID)) {
+        return false;
+      }
+      
+      return true;
     } catch {
       return false;
+    }
+  }
+
+  // Validate multiple NFT addresses at once
+  async validateNFTBatch(mintAddresses: PublicKey[]): Promise<Map<string, boolean>> {
+    const results = new Map<string, boolean>();
+    
+    const promises = mintAddresses.map(async (mintAddress) => {
+      const exists = await this.nftExists(mintAddress);
+      results.set(mintAddress.toString(), exists);
+    });
+    
+    await Promise.all(promises);
+    return results;
+  }
+
+  // Clean up invalid NFT metadata from localStorage
+  async cleanupInvalidNFTMetadata(): Promise<string[]> {
+    const cleaned: string[] = [];
+    
+    try {
+      const nftKeys: string[] = [];
+      
+      // Find all NFT metadata keys
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith('nft_metadata_')) {
+          nftKeys.push(key);
+        }
+      }
+      
+      console.log(`🔍 Found ${nftKeys.length} NFT metadata entries to validate`);
+      
+      // Validate each NFT
+      for (const key of nftKeys) {
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          try {
+            const metadata = JSON.parse(stored) as NFTMetadata;
+            const mintAddress = new PublicKey(metadata.mintAddress);
+            
+            const exists = await this.nftExists(mintAddress);
+            if (!exists) {
+              console.log(`🗑️ Removing invalid NFT metadata: ${metadata.mintAddress}`);
+              localStorage.removeItem(key);
+              cleaned.push(metadata.mintAddress);
+            }
+          } catch (error) {
+            console.warn(`Failed to validate NFT metadata ${key}:`, error);
+            localStorage.removeItem(key);
+            cleaned.push(key);
+          }
+        }
+      }
+      
+      console.log(`✅ Cleaned up ${cleaned.length} invalid NFT metadata entries`);
+      return cleaned;
+      
+    } catch (error) {
+      console.error('Failed to cleanup NFT metadata:', error);
+      return [];
     }
   }
 

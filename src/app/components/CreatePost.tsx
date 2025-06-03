@@ -205,7 +205,23 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
           
         } catch (error) {
           console.error('Failed to create image post with NFT:', error);
-          Toast.error('Failed to create image post. Please try again.');
+          
+          // More specific error handling
+          if (error instanceof Error) {
+            if (error.message.includes('Lighthouse')) {
+              Toast.error('Image upload to IPFS failed. Please check your internet connection and try again.');
+            } else if (error.message.includes('NFT mint account not found')) {
+              Toast.error('NFT creation failed. The blockchain could not verify your NFT. Please try again.');
+            } else if (error.message.includes('Invalid NFT account')) {
+              Toast.error('NFT validation failed. Please try creating the post again.');
+            } else if (error.message.includes('API key')) {
+              Toast.error('Image storage service unavailable. Please try posting without an image.');
+            } else {
+              Toast.error('Failed to create image post. Please try again or post without an image.');
+            }
+          } else {
+            Toast.error('Failed to create image post. Please try again.');
+          }
           return;
         } finally {
           setIsUploadingImage(false);

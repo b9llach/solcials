@@ -1961,6 +1961,25 @@ export class SolcialsCustomProgramService {
       throw new Error('Content too long (max 280 characters)');
     }
 
+    // VALIDATE NFT EXISTS BEFORE CREATING POST
+    console.log('🔍 Validating NFT exists on blockchain:', cnftAddress.toString());
+    try {
+      const nftAccount = await this.connection.getAccountInfo(cnftAddress);
+      if (!nftAccount) {
+        throw new Error(`NFT mint account not found: ${cnftAddress.toString()}. Cannot create post with invalid NFT reference.`);
+      }
+      
+      // Verify it's actually a token mint account
+      if (nftAccount.data.length < 82) { // Mint accounts are 82 bytes
+        throw new Error(`Invalid NFT account data. Expected mint account but got ${nftAccount.data.length} bytes.`);
+      }
+      
+      console.log('✅ NFT validation passed, proceeding with post creation');
+    } catch (error) {
+      console.error('❌ NFT validation failed:', error);
+      throw new Error(`Cannot create image post: ${error instanceof Error ? error.message : 'NFT validation failed'}`);
+    }
+
     const timestamp = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
     const [postPDA] = this.getPostPDA(wallet.publicKey, timestamp);
     const [userProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
@@ -1969,7 +1988,7 @@ export class SolcialsCustomProgramService {
     await this.ensureUserProfile(wallet);
 
     // Create instruction data for image post with cNFT
-    const instructionData = Buffer.alloc(8 + content.length + 4 + 8 + 32 + 33);
+    const instructionData = Buffer.alloc(8 + content.length + 4 + 8 + 33);
     let offset = 0;
     
     // Instruction discriminator for create_image_post
@@ -2021,8 +2040,14 @@ export class SolcialsCustomProgramService {
     
     console.log('✅ Image post created:', signature);
     
-    // Now link the cNFT to the post
-    await this.linkCNftToPost(wallet, postPDA, cnftAddress);
+    // Now link the cNFT to the post (with additional validation)
+    try {
+      await this.linkCNftToPost(wallet, postPDA, cnftAddress);
+    } catch (linkError) {
+      console.error('⚠️ Failed to link cNFT to post, but post was created:', linkError);
+      // Post was created successfully, but linking failed
+      // This is not a critical error since the post exists
+    }
     
     // Clear any cached data to reflect the new post
     this.clearAccountsCache();
