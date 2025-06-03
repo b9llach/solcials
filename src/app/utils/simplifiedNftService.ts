@@ -22,6 +22,7 @@ interface SimplifiedNFTResult {
   transactionSignature: string;
   imageUrl: string;
   ipfsCid: string;
+  metadataCid?: string; // IPFS CID of the metadata JSON for public access
 }
 
 interface NFTMetadata {
@@ -154,7 +155,7 @@ export class SimplifiedNFTService {
       console.log('🪙 NFT Address:', mintAccount.toString());
       console.log('📄 Transaction:', signature);
 
-      // Step 7: Store metadata locally for retrieval
+      // Step 7: Store metadata both locally AND on IPFS for public access
       const metadata: NFTMetadata = {
         mintAddress: mintAccount.toString(),
         imageUrl: gatewayUrl,
@@ -164,13 +165,44 @@ export class SimplifiedNFTService {
         createdAt: Date.now(),
       };
 
+      // Store locally for immediate access
       this.storeNFTMetadata(mintAccount, metadata);
+      
+      // ALSO store metadata on IPFS so other users can access it
+      let metadataCid: string | undefined;
+      try {
+        console.log('📤 Uploading NFT metadata to IPFS for public access...');
+        const metadataJson = JSON.stringify(metadata);
+        const metadataFile = new File([metadataJson], `${mintAccount.toString()}.json`, {
+          type: 'application/json'
+        });
+        
+        const { cid: uploadedMetadataCid } = await lighthouseService.uploadImage(metadataFile);
+        metadataCid = uploadedMetadataCid;
+        console.log('✅ NFT metadata uploaded to IPFS:', metadataCid);
+        
+        // Store the metadata CID reference locally so we can find it later
+        const metadataReference = {
+          mintAddress: mintAccount.toString(),
+          metadataCid,
+          imageUrl: gatewayUrl,
+          ipfsCid: cid
+        };
+        
+        localStorage.setItem(`nft_metadata_ref_${mintAccount.toString()}`, JSON.stringify(metadataReference));
+        console.log('📝 Stored NFT metadata reference for public access');
+        
+      } catch (metadataUploadError) {
+        console.warn('⚠️ Failed to upload metadata to IPFS, but NFT was created successfully:', metadataUploadError);
+        // Don't fail the whole operation if metadata upload fails
+      }
 
       return {
         nftAddress: mintAccount,
         transactionSignature: signature,
         imageUrl: gatewayUrl,
         ipfsCid: cid,
+        metadataCid,
       };
 
     } catch (error) {
@@ -190,8 +222,14 @@ export class SimplifiedNFTService {
     }
   }
 
-  // Get NFT metadata from local storage or blockchain
-  async getNFTMetadata(mintAddress: PublicKey): Promise<NFTMetadata | null> {
+  // Extract metadata CID from post content if present
+  private extractMetadataCidFromPost(postContent: string): string | null {
+    const metaMatch = postContent.match(/__META:([a-zA-Z0-9]+)__/);
+    return metaMatch ? metaMatch[1] : null;
+  }
+
+  // Get NFT metadata from local storage, IPFS, or post content
+  async getNFTMetadata(mintAddress: PublicKey, postContent?: string): Promise<NFTMetadata | null> {
     try {
       const key = `nft_metadata_${mintAddress.toString()}`;
       const stored = localStorage.getItem(key);
@@ -202,7 +240,62 @@ export class SimplifiedNFTService {
         return metadata;
       }
 
-      // If not found locally, try to fetch from on-chain data
+      // If post content is provided, try to extract metadata CID from it
+      if (postContent) {
+        const metadataCid = this.extractMetadataCidFromPost(postContent);
+        if (metadataCid) {
+          try {
+            console.log('📋 Found metadata CID in post content:', metadataCid);
+            
+            // Fetch metadata from IPFS
+            const metadataUrl = `https://gateway.lighthouse.storage/ipfs/${metadataCid}`;
+            const response = await fetch(metadataUrl);
+            
+            if (response.ok) {
+              const ipfsMetadata = await response.json() as NFTMetadata;
+              console.log('✅ Successfully fetched NFT metadata from IPFS via post content');
+              
+              // Cache it locally for next time
+              localStorage.setItem(key, JSON.stringify(ipfsMetadata));
+              return ipfsMetadata;
+            } else {
+              console.warn('⚠️ Failed to fetch metadata from IPFS, status:', response.status);
+            }
+          } catch (ipfsError) {
+            console.warn('⚠️ Error fetching metadata from IPFS via post content:', ipfsError);
+          }
+        }
+      }
+
+      // If not found locally, try to fetch from IPFS using metadata reference
+      console.log('🔍 Attempting to fetch NFT metadata from IPFS reference:', mintAddress.toString());
+      const metadataRef = localStorage.getItem(`nft_metadata_ref_${mintAddress.toString()}`);
+      
+      if (metadataRef) {
+        try {
+          const reference = JSON.parse(metadataRef);
+          console.log('📋 Found metadata reference:', reference);
+          
+          // Fetch metadata from IPFS
+          const metadataUrl = `https://gateway.lighthouse.storage/ipfs/${reference.metadataCid}`;
+          const response = await fetch(metadataUrl);
+          
+          if (response.ok) {
+            const ipfsMetadata = await response.json() as NFTMetadata;
+            console.log('✅ Successfully fetched NFT metadata from IPFS');
+            
+            // Cache it locally for next time
+            localStorage.setItem(key, JSON.stringify(ipfsMetadata));
+            return ipfsMetadata;
+          } else {
+            console.warn('⚠️ Failed to fetch metadata from IPFS, status:', response.status);
+          }
+        } catch (ipfsError) {
+          console.warn('⚠️ Error fetching metadata from IPFS:', ipfsError);
+        }
+      }
+
+      // If not found in IPFS references, try blockchain fallback
       console.log('🔍 Attempting to fetch NFT metadata from blockchain:', mintAddress.toString());
       return await this.fetchNFTFromBlockchain(mintAddress);
 

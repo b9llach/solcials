@@ -14,7 +14,6 @@ import { Input } from '@/components/ui/input';
 import ReplyDialog from './ReplyDialog';
 import ThreadContext from './ThreadContext';
 import NFTImage from './NFTImage';
-import ImageModal from './ImageModal';
 import { ExternalLink, UserPlus, Clock, MessageSquare, Loader2, Users, Copy, Check } from 'lucide-react';
 import { Toast } from '../utils/toast';
 
@@ -42,12 +41,6 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
   // Cache for user profiles to avoid repeated fetches
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
   const [loadingProfiles, setLoadingProfiles] = useState<Set<string>>(new Set());
-
-  // Image modal state
-  const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [selectedImageUrl, setSelectedImageUrl] = useState('');
-  const [selectedImageAlt, setSelectedImageAlt] = useState('');
-  const [selectedImageShowMetadata, setSelectedImageShowMetadata] = useState(false);
 
   const { connection } = useConnection();
   const wallet = useWallet();
@@ -690,15 +683,16 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
                       <NFTImage
                         imageUrl={post.imageUrl!}
                         alt="Post image"
-                        aspectRatio="wide"
+                        width={500}
                         height={300}
-                        onClick={() => {
-                          setSelectedImageUrl(post.imageUrl!);
-                          setSelectedImageAlt("Post image");
-                          setSelectedImageShowMetadata(post.imageUrl?.startsWith('nft:') || false);
-                          setImageModalOpen(true);
+                        postContent={post.content}
+                        className="w-full cursor-pointer"
+                        onLoad={() => {
+                          // Image loaded successfully
                         }}
-                        showMetadata={post.imageUrl?.startsWith('nft:')}
+                        onError={() => {
+                          console.error('Failed to load image for post:', post.id);
+                        }}
                       />
                     </div>
                   )}
@@ -922,15 +916,6 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
           )}
         </div>
       </ScrollArea>
-
-      {/* Image Modal */}
-      <ImageModal
-        isOpen={imageModalOpen}
-        onClose={() => setImageModalOpen(false)}
-        imageUrl={selectedImageUrl}
-        alt={selectedImageAlt}
-        showMetadata={selectedImageShowMetadata}
-      />
 
       {/* Share Dialog */}
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>

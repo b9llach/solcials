@@ -1,135 +1,90 @@
+'use client';
+
 import React from 'react';
 import Image from 'next/image';
 import { useNFTResolver } from '../hooks/useNFTResolver';
-import { Loader2, ImageIcon } from 'lucide-react';
+import { Loader2, ImageIcon, AlertCircle } from 'lucide-react';
 
 interface NFTImageProps {
   imageUrl: string;
   alt: string;
   className?: string;
-  onClick?: () => void;
-  showMetadata?: boolean;
-  aspectRatio?: 'auto' | 'square' | 'video' | 'wide'; // Control cropping behavior
-  height?: number; // Fixed height for cropping
+  width?: number;
+  height?: number;
+  postContent?: string; // Post content that might contain metadata CID
+  onLoad?: () => void;
+  onError?: () => void;
 }
 
 export default function NFTImage({ 
   imageUrl, 
   alt, 
   className = '', 
-  onClick,
-  showMetadata = false,
-  aspectRatio = 'auto',
-  height = 400
+  width = 500, 
+  height = 300,
+  postContent, // Accept post content
+  onLoad,
+  onError 
 }: NFTImageProps) {
-  const { imageUrl: resolvedUrl, isLoading, error } = useNFTResolver(imageUrl);
+  const { imageUrl: resolvedUrl, isLoading, error } = useNFTResolver(imageUrl, { 
+    postContent // Pass post content to resolver
+  });
 
-  // Show loading state for NFT URLs
-  if (isLoading && imageUrl.startsWith('nft:')) {
+  // Show loading state
+  if (isLoading) {
     return (
-      <div className={`flex items-center justify-center bg-muted/20 rounded-lg border ${className}`}>
-        <div className="text-center p-8">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">loading nft image...</p>
+      <div className={`flex items-center justify-center bg-gray-100 ${className}`} style={{ width, height }}>
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">Loading NFT...</p>
         </div>
       </div>
     );
   }
 
   // Show error state
-  if (error) {
+  if (error && !resolvedUrl) {
     return (
-      <div className={`flex items-center justify-center bg-muted/20 rounded-lg border ${className}`}>
-        <div className="text-center p-8">
-          <ImageIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">failed to load nft image</p>
-          {imageUrl.startsWith('nft:') && (
-            <p className="text-xs text-muted-foreground mt-1">
-              nft: {imageUrl.replace('nft:', '').slice(0, 8)}...
-            </p>
-          )}
+      <div className={`flex items-center justify-center bg-red-50 ${className}`} style={{ width, height }}>
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
+          <p className="text-sm text-red-600">Failed to load image</p>
+          <p className="text-xs text-red-400 mt-1">{error}</p>
         </div>
       </div>
     );
   }
 
-  // Don't render if resolvedUrl is empty or null
-  if (!resolvedUrl || resolvedUrl.trim() === '') {
+  // Show placeholder if no URL resolved
+  if (!resolvedUrl) {
     return (
-      <div className={`flex items-center justify-center bg-muted/20 rounded-lg border ${className}`}>
-        <div className="text-center p-8">
-          <ImageIcon className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">no image available</p>
+      <div className={`flex items-center justify-center bg-gray-100 ${className}`} style={{ width, height }}>
+        <div className="text-center">
+          <ImageIcon className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-500">No image available</p>
         </div>
       </div>
     );
   }
 
-  // Determine image display style based on aspectRatio prop
-  const getImageStyles = () => {
-    switch (aspectRatio) {
-      case 'square':
-        return {
-          className: 'w-full h-full object-cover',
-          containerStyle: { aspectRatio: '1/1', height: `${height}px` }
-        };
-      case 'video':
-        return {
-          className: 'w-full h-full object-cover',
-          containerStyle: { aspectRatio: '16/9', height: 'auto' }
-        };
-      case 'wide':
-        return {
-          className: 'w-full h-full object-cover',
-          containerStyle: { height: `${height}px` }
-        };
-      case 'auto':
-      default:
-        return {
-          className: 'w-auto h-auto max-w-full max-h-[300px] sm:max-h-[400px]',
-          containerStyle: {}
-        };
-    }
-  };
-
-  const { className: imageClassName, containerStyle } = getImageStyles();
-
-  // Show the actual image using Next.js Image component
+  // Render the resolved image
   return (
-    <div className={`rounded-lg overflow-hidden border bg-muted/10 ${className}`}>
-      <div 
-        className={`relative w-full bg-gray-50 dark:bg-gray-900 ${onClick ? 'cursor-pointer' : ''} flex justify-center items-center`}
-        style={containerStyle}
-        onClick={onClick}
-      >
-        <Image 
-          src={resolvedUrl} 
-          alt={alt}
-          fill={aspectRatio !== 'auto'}
-          width={aspectRatio === 'auto' ? 0 : undefined}
-          height={aspectRatio === 'auto' ? 0 : undefined}
-          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-          className={`${imageClassName} hover:scale-105 transition-transform duration-300 rounded-lg`}
-          style={aspectRatio === 'auto' ? { 
-            width: 'auto',
-            height: 'auto',
-            maxWidth: '100%'
-          } : undefined}
-          onError={(e) => {
-            console.error('Image load error:', e);
-          }}
-          priority={false}
-          unoptimized={resolvedUrl.startsWith('data:')} // Don't optimize data URLs
-        />
-      </div>
-      {showMetadata && imageUrl.startsWith('nft:') && (
-        <div className="p-2 bg-muted/50 border-t">
-          <p className="text-xs text-muted-foreground flex items-center">
-            <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
-            <span className="truncate">nft • stored on chain</span>
-          </p>
-        </div>
-      )}
+    <div className={className}>
+      <Image
+        src={resolvedUrl}
+        alt={alt}
+        width={width}
+        height={height}
+        className="rounded-lg object-cover"
+        onLoad={onLoad}
+        onError={() => {
+          console.error('Image failed to load:', resolvedUrl);
+          onError?.();
+        }}
+        priority={false}
+        placeholder="blur"
+        blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkbHB0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
+      />
     </div>
   );
 } 

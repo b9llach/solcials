@@ -10,11 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import ReplyDialog from '../../components/ReplyDialog';
-import { ArrowLeft, Clock, ExternalLink, ImageIcon, UserPlus, Copy, Check } from 'lucide-react';
+import { ArrowLeft, Clock, ExternalLink, UserPlus, Copy, Check } from 'lucide-react';
 import Link from 'next/link';
 import { PublicKey } from '@solana/web3.js';
 import NFTImage from '../../components/NFTImage';
-import ImageModal from '../../components/ImageModal';
 import { Toast } from '../../utils/toast';
 
 export default function PostDetailPage() {
@@ -32,15 +31,9 @@ export default function PostDetailPage() {
   const [replies, setReplies] = useState<SocialPost[]>([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
   
-  // Image modal state
-  const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [selectedImageUrl, setSelectedImageUrl] = useState('');
-  const [selectedImageAlt, setSelectedImageAlt] = useState('');
-  const [selectedImageShowMetadata, setSelectedImageShowMetadata] = useState(false);
-  
   // Cache for user profiles
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
-  
+
   const { connection } = useConnection();
   const wallet = useWallet();
 
@@ -456,27 +449,21 @@ export default function PostDetailPage() {
 
             {/* Post Image */}
             {hasImage && (
-              <div className="mb-3 sm:mb-4">
+              <div className="mb-4">
                 <NFTImage
                   imageUrl={post.imageUrl!}
                   alt="Post image"
-                  aspectRatio="wide"
+                  width={600}
                   height={400}
-                  onClick={() => {
-                    setSelectedImageUrl(post.imageUrl!);
-                    setSelectedImageAlt("Post image");
-                    setSelectedImageShowMetadata(post.imageUrl?.startsWith('nft:') || false);
-                    setImageModalOpen(true);
+                  postContent={post.content}
+                  className="w-full rounded-lg"
+                  onLoad={() => {
+                    console.log('Image loaded successfully');
                   }}
-                  showMetadata={post.imageUrl?.startsWith('nft:')}
-                  className="rounded-lg sm:rounded-xl overflow-hidden border bg-muted/10"
+                  onError={() => {
+                    console.error('Failed to load image for post:', post.id);
+                  }}
                 />
-                {post.imageSize && post.imageSize > 0 && (
-                  <p className="text-xs text-muted-foreground mt-2 flex items-center">
-                    <ImageIcon className="h-3 w-3 mr-1 flex-shrink-0" />
-                    <span className="truncate">{(post.imageSize / 1024 / 1024).toFixed(2)} MB • Stored on IPFS</span>
-                  </p>
-                )}
               </div>
             )}
             
@@ -694,15 +681,6 @@ export default function PostDetailPage() {
           )}
         </div>
       </div>
-
-      {/* Image Modal */}
-      <ImageModal
-        isOpen={imageModalOpen}
-        onClose={() => setImageModalOpen(false)}
-        imageUrl={selectedImageUrl}
-        alt={selectedImageAlt}
-        showMetadata={selectedImageShowMetadata}
-      />
 
       {/* Share Dialog - exactly like PostList */}
       <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>

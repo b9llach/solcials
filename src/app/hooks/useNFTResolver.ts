@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { NFTResolver } from '../utils/nftResolver';
 
+interface UseNFTResolverOptions {
+  postContent?: string; // Post content that might contain metadata CID
+}
+
 interface UseNFTResolverResult {
   imageUrl: string;
   isLoading: boolean;
@@ -8,7 +12,7 @@ interface UseNFTResolverResult {
 }
 
 // Hook for resolving a single NFT URL
-export function useNFTResolver(nftUrl: string | undefined): UseNFTResolverResult {
+export function useNFTResolver(nftUrl: string | undefined, options?: UseNFTResolverOptions): UseNFTResolverResult {
   const [imageUrl, setImageUrl] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,11 +38,16 @@ export function useNFTResolver(nftUrl: string | undefined): UseNFTResolverResult
         setIsLoading(true);
         setError(null);
         
-        const resolved = await NFTResolver.resolveNFTUrl(nftUrl);
+        console.log('🔍 Resolving NFT URL:', nftUrl);
+        console.log('📋 Post content provided:', !!options?.postContent);
+        
+        const resolved = await NFTResolver.resolveNFTUrl(nftUrl, options?.postContent);
         setImageUrl(resolved);
+        
+        console.log('✅ NFT URL resolved:', resolved);
       } catch (err) {
-        console.error('Failed to resolve NFT:', err);
-        setError(err instanceof Error ? err.message : 'Failed to resolve NFT');
+        console.error('❌ Failed to resolve NFT URL:', err);
+        setError(err instanceof Error ? err.message : 'Failed to resolve NFT URL');
         setImageUrl(`https://via.placeholder.com/400x300?text=Error`);
       } finally {
         setIsLoading(false);
@@ -46,7 +55,7 @@ export function useNFTResolver(nftUrl: string | undefined): UseNFTResolverResult
     };
 
     resolveNFT();
-  }, [nftUrl]);
+  }, [nftUrl, options?.postContent]);
 
   return { imageUrl, isLoading, error };
 }

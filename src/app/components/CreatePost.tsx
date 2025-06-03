@@ -181,7 +181,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
           
           // Step 1: Create the NFT
           const nftService = getSimplifiedNFTService();
-          const { nftAddress } = await nftService.createImageNFT(
+          const { nftAddress, metadataCid } = await nftService.createImageNFT(
             {
               publicKey: wallet.publicKey,
               signTransaction: wallet.signTransaction,
@@ -193,15 +193,17 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
           );
           
           console.log('✅ NFT created:', nftAddress.toString());
+          console.log('📋 Metadata CID:', metadataCid);
           
-          // Step 2: Create the image post with NFT reference
+          // Step 2: Create the image post with NFT reference AND metadata CID
           await customService.createImagePostWithCNft(
             wallet, 
             content.trim(), 
-            nftAddress
+            nftAddress,
+            metadataCid // Pass metadata CID for public access
           );
           
-          console.log('✅ Image post created with NFT reference!');
+          console.log('✅ Image post created with NFT reference and metadata CID!');
           
         } catch (error) {
           console.error('Failed to create image post with NFT:', error);

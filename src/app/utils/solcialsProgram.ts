@@ -1951,6 +1951,7 @@ export class SolcialsCustomProgramService {
     wallet: WalletAdapter, 
     content: string, 
     cnftAddress: PublicKey,
+    metadataCid?: string, // Optional metadata CID for IPFS metadata access
     replyTo?: PublicKey
   ): Promise<string> {
     if (!wallet.publicKey || !wallet.signTransaction || !wallet.connected) {
@@ -1980,6 +1981,13 @@ export class SolcialsCustomProgramService {
       throw new Error(`Cannot create image post: ${error instanceof Error ? error.message : 'NFT validation failed'}`);
     }
 
+    // If metadata CID is provided, append it to content in a special format
+    let finalContent = content;
+    if (metadataCid) {
+      finalContent = `${content}\n__META:${metadataCid}__`; // Hidden metadata reference
+      console.log('📋 Including metadata CID in post for public access:', metadataCid);
+    }
+
     const timestamp = Math.floor(Date.now() / 1000); // Convert milliseconds to seconds
     const [postPDA] = this.getPostPDA(wallet.publicKey, timestamp);
     const [userProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
@@ -1988,7 +1996,7 @@ export class SolcialsCustomProgramService {
     await this.ensureUserProfile(wallet);
 
     // Create instruction data for image post with cNFT
-    const instructionData = Buffer.alloc(8 + content.length + 4 + 8 + 33);
+    const instructionData = Buffer.alloc(8 + finalContent.length + 4 + 8 + 33);
     let offset = 0;
     
     // Instruction discriminator for create_image_post
@@ -1996,10 +2004,10 @@ export class SolcialsCustomProgramService {
     offset += 8;
     
     // String serialization: length (4 bytes) + content
-    instructionData.writeUInt32LE(content.length, offset);
+    instructionData.writeUInt32LE(finalContent.length, offset);
     offset += 4;
-    Buffer.from(content, 'utf8').copy(instructionData, offset);
-    offset += content.length;
+    Buffer.from(finalContent, 'utf8').copy(instructionData, offset);
+    offset += finalContent.length;
     
     // Timestamp
     const timestampBuffer = Buffer.alloc(8);

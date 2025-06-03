@@ -16,7 +16,7 @@ export class NFTResolver {
   private static pendingRequests = new Map<string, Promise<ResolvedNFT | null>>();
 
   // Resolve NFT URL from "nft:address" format to actual image URL
-  static async resolveNFTUrl(nftUrl: string): Promise<string> {
+  static async resolveNFTUrl(nftUrl: string, postContent?: string): Promise<string> {
     // If it's not an NFT URL, return as-is
     if (!nftUrl.startsWith('nft:')) {
       return nftUrl;
@@ -36,8 +36,8 @@ export class NFTResolver {
       // Check if there's already a pending request
       let pendingRequest = this.pendingRequests.get(nftAddress);
       if (!pendingRequest) {
-        // Create new request
-        pendingRequest = this.fetchNFTMetadata(nftPubkey);
+        // Create new request with post content
+        pendingRequest = this.fetchNFTMetadata(nftPubkey, postContent);
         this.pendingRequests.set(nftAddress, pendingRequest);
       }
 
@@ -86,10 +86,10 @@ export class NFTResolver {
   }
 
   // Fetch NFT metadata from the service
-  private static async fetchNFTMetadata(nftAddress: PublicKey): Promise<ResolvedNFT | null> {
+  private static async fetchNFTMetadata(nftAddress: PublicKey, postContent?: string): Promise<ResolvedNFT | null> {
     try {
       const nftService = getSimplifiedNFTService();
-      const metadata = await nftService.getNFTMetadata(nftAddress);
+      const metadata = await nftService.getNFTMetadata(nftAddress, postContent);
       
       if (metadata) {
         // Check if we have a valid image URL
@@ -164,26 +164,23 @@ export class NFTResolver {
     `)}`;
   }
 
-  // Bulk resolve multiple NFT URLs (useful for post lists)
-  static async bulkResolveNFTUrls(nftUrls: string[]): Promise<Map<string, string>> {
+  // Bulk resolve multiple NFT URLs
+  static async bulkResolveNFTUrls(nftUrls: string[], postContents?: Map<string, string>): Promise<Map<string, string>> {
     const results = new Map<string, string>();
     
-    // Filter and process only NFT URLs
-    const nftOnlyUrls = nftUrls.filter(url => url.startsWith('nft:'));
-    
-    // Resolve all in parallel
-    const promises = nftOnlyUrls.map(async (url) => {
-      const resolved = await this.resolveNFTUrl(url);
-      return { original: url, resolved };
+    // Process all URLs in parallel
+    const promises = nftUrls.map(async (url) => {
+      try {
+        const postContent = postContents?.get(url);
+        const resolved = await this.resolveNFTUrl(url, postContent);
+        results.set(url, resolved);
+      } catch (error) {
+        console.error(`Failed to resolve ${url}:`, error);
+        results.set(url, url); // Fallback to original URL
+      }
     });
-
-    const resolvedResults = await Promise.all(promises);
     
-    // Build the results map
-    resolvedResults.forEach(({ original, resolved }) => {
-      results.set(original, resolved);
-    });
-
+    await Promise.all(promises);
     return results;
   }
 
