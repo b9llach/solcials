@@ -53,7 +53,7 @@ export class Toast {
           </div>
           <div class="ml-3 w-0 flex-1">
             <p class="text-sm font-medium ${colors.text}">
-              ${this.escapeHtml(message)}
+              ${this.escapeHtml(message.toLowerCase())}
             </p>
           </div>
           <div class="ml-4 flex-shrink-0 flex">
