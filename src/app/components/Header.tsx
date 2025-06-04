@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -47,10 +48,10 @@ export default function Header() {
               </h1>
               <span className="hidden sm:inline text-base sm:text-xl font-bold text-foreground">|</span>
               <Badge variant="outline" className="text-xs hidden sm:inline-flex whitespace-nowrap">
-                beta
+                beta 0.1.1
               </Badge>
               <Badge variant="outline" className="text-xs sm:hidden">
-                beta
+                beta 0.1.1
               </Badge>
             </button>
           </div>
@@ -73,6 +74,18 @@ export default function Header() {
 
           {/* Right Section - Theme Toggle & Wallet */}
           <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+          <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+              title="Development Log"
+            >
+              <Link href="/log">
+                <span className="hidden sm:inline">devlog</span>
+                <span className="sm:hidden">log</span>
+              </Link>
+            </Button>
             <Button
               variant="ghost"
               size="sm"
