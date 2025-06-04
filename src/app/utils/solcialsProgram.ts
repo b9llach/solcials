@@ -283,8 +283,8 @@ export class SolcialsCustomProgramService {
 
     const instruction = new TransactionInstruction({
       keys: [
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // user (must be signer) first
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
@@ -297,6 +297,9 @@ export class SolcialsCustomProgramService {
 
     const signedTransaction = await wallet.signTransaction(transaction);
     const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
+
+    // Wait for transaction confirmation before proceeding
+    await this.connection.confirmTransaction(signature, 'confirmed');
 
     console.log('✅ User profile initialized:', signature);
     return signature;
