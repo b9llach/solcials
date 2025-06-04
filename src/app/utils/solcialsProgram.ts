@@ -396,7 +396,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: PLATFORM_TREASURY, isSigner: false, isWritable: true }, // Platform fee recipient
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
@@ -423,7 +422,7 @@ export class SolcialsCustomProgramService {
     return signature;
   }
 
-  // Create an image post (premium with platform fee)
+  // Create an image post (free)
   async createImagePost(
     wallet: WalletAdapter, 
     content: string, 
@@ -517,7 +516,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: PLATFORM_TREASURY, isSigner: false, isWritable: true }, // Platform fee recipient
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
@@ -536,7 +534,7 @@ export class SolcialsCustomProgramService {
     const signedTransaction = await wallet.signTransaction(transaction);
     const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
 
-    console.log('✅ Image post created with platform fee:', signature);
+    console.log('✅ Image post created:', signature);
     
     // Clear cache since we added new data
     this.clearAccountsCache();
@@ -1345,23 +1343,18 @@ export class SolcialsCustomProgramService {
         breakdown += `, Image chunks (${chunksNeeded}): ${(totalImageCost / 1e9).toFixed(4)} SOL`;
       }
       
-      // Calculate platform fees
-      const platformFeeRate = hasImage ? 0.10 : 0.01; // 10% for images, 1% for text
-      const platformFee = Math.floor(totalStorageCost * platformFeeRate);
-      
-      const totalCost = totalStorageCost + platformFee;
-      
+      // No platform fees - posts are free!
       return {
-        totalCost,
-        breakdown: `${breakdown}, Platform fee: ${(platformFee / 1e9).toFixed(4)} SOL`
+        totalCost: totalStorageCost,
+        breakdown
       };
     } catch (error) {
       console.error('Error calculating costs:', error);
-      // Fallback estimates
-      const fallbackCost = hasImage ? 0.015 * 1e9 : 0.003 * 1e9; // Convert to lamports
+      // Fallback estimates (only rent, no platform fees)
+      const fallbackCost = hasImage ? 0.005 * 1e9 : 0.0015 * 1e9; // Convert to lamports
       return {
         totalCost: fallbackCost,
-        breakdown: hasImage ? '~0.015 SOL (estimated)' : '~0.003 SOL (estimated)'
+        breakdown: hasImage ? '~0.005 SOL (estimated)' : '~0.0015 SOL (estimated)'
       };
     }
   }
@@ -1485,7 +1478,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPda, isSigner: false, isWritable: true },
         { pubkey: userProfilePda, isSigner: false, isWritable: true },
-        { pubkey: this.platformTreasury, isSigner: false, isWritable: true },
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
@@ -1532,7 +1524,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPda, isSigner: false, isWritable: true },
         { pubkey: userProfilePda, isSigner: false, isWritable: true },
-        { pubkey: this.platformTreasury, isSigner: false, isWritable: true },
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
@@ -2158,7 +2149,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: PLATFORM_TREASURY, isSigner: false, isWritable: true },
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
