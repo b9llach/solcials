@@ -592,14 +592,14 @@ export class SolcialsCustomProgramService {
           offset += contentLength;
           
           // DEBUG: Log post content to see if metadata CID is present
-          if (imageNft) {
-            console.log('🔍 Image post content:', content);
-            if (content.includes('__META:')) {
-              console.log('✅ Found metadata CID in post content!');
-            } else {
-              console.log('❌ No metadata CID found in post content');
-            }
-          }
+          // if (imageNft) {
+          //   console.log('🔍 Image post content:', content);
+          //   if (content.includes('__META:')) {
+          //     console.log('✅ Found metadata CID in post content!');
+          //   } else {
+          //     console.log('❌ No metadata CID found in post content');
+          //   }
+          // }
 
           // Post type (1 byte)
           if (data.length < offset + 1) continue;
