@@ -795,7 +795,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
                         className="text-muted-foreground hover:text-primary hover:bg-accent transition-all h-8 px-2 sm:px-3"
                       >
                         <a
-                          href={`https://solscan.io/tx/${post.signature}`}
+                          href={`https://solscan.io/account/${post.signature}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="flex items-center space-x-1"

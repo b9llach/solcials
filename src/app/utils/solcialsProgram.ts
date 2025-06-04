@@ -95,12 +95,12 @@ export class SolcialsCustomProgramService {
     // Validate we're using the correct program ID for mainnet
     console.log('🎯 Program ID validation:');
     console.log('  Using Program ID:', this.programId.toString());
-    console.log('  Expected Mainnet ID: GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi');
-    console.log('  Is correct mainnet program?', this.programId.toString() === 'GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi');
+    console.log('  Expected Mainnet ID: 7a6vstpjcuYDJDGiyvhkTCteZePCwpwDzucLCe2uacmY');
+    console.log('  Is correct mainnet program?', this.programId.toString() === '7a6vstpjcuYDJDGiyvhkTCteZePCwpwDzucLCe2uacmY');
     
-    if (this.programId.toString() !== 'GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi') {
+    if (this.programId.toString() !== '7a6vstpjcuYDJDGiyvhkTCteZePCwpwDzucLCe2uacmY') {
       console.warn('⚠️ WARNING: Not using the correct mainnet program ID! This might cause wallet security warnings.');
-      console.warn('⚠️ Expected: GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi');
+      console.warn('⚠️ Expected: 7a6vstpjcuYDJDGiyvhkTCteZePCwpwDzucLCe2uacmY');
       console.warn('⚠️ Current:  ', this.programId.toString());
       console.warn('⚠️ Set NEXT_PUBLIC_SOLCIALS_PROGRAM_ID in your .env.local file');
     }

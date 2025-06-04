@@ -71,11 +71,34 @@ export class SimplifiedNFTService {
         wallet.publicKey
       );
 
+      // Step 3.5: CHECK WALLET BALANCE BEFORE CREATING TRANSACTION
+      console.log('💰 Checking wallet balance for NFT creation...');
+      const walletBalance = await this.connection.getBalance(wallet.publicKey);
+      const mintRent = await getMinimumBalanceForRentExemptMint(this.connection);
+      const associatedTokenAccountRent = await this.connection.getMinimumBalanceForRentExemption(165); // ATA size
+      const estimatedTxFee = 15000; // Conservative estimate for complex transaction
+      const totalNeeded = mintRent + associatedTokenAccountRent + estimatedTxFee;
+
+      console.log('💰 NFT Creation Cost Breakdown:');
+      console.log('  Current balance:', walletBalance, 'lamports (', (walletBalance / 1000000000).toFixed(6), 'SOL)');
+      console.log('  Mint account rent:', mintRent, 'lamports (', (mintRent / 1000000000).toFixed(6), 'SOL)');
+      console.log('  ATA account rent:', associatedTokenAccountRent, 'lamports (', (associatedTokenAccountRent / 1000000000).toFixed(6), 'SOL)');
+      console.log('  Estimated tx fee:', estimatedTxFee, 'lamports (', (estimatedTxFee / 1000000000).toFixed(6), 'SOL)');
+      console.log('  Total needed:', totalNeeded, 'lamports (', (totalNeeded / 1000000000).toFixed(6), 'SOL)');
+      console.log('  Remaining after tx:', (walletBalance - totalNeeded), 'lamports (', ((walletBalance - totalNeeded) / 1000000000).toFixed(6), 'SOL)');
+
+      if (walletBalance < totalNeeded) {
+        throw new Error(`Insufficient wallet balance for NFT creation. You need ${(totalNeeded / 1000000000).toFixed(6)} SOL but only have ${(walletBalance / 1000000000).toFixed(6)} SOL`);
+      }
+
+      // Step 3.6: CHECK IF ASSOCIATED TOKEN ACCOUNT ALREADY EXISTS
+      const existingATA = await this.connection.getAccountInfo(associatedTokenAccount);
+      console.log('🔍 Associated Token Account check:', existingATA ? 'Already exists' : 'Needs creation');
+
       // Step 4: Build transaction
       const transaction = new Transaction();
       
       // Create mint account
-      const mintRent = await getMinimumBalanceForRentExemptMint(this.connection);
       transaction.add(
         SystemProgram.createAccount({
           fromPubkey: wallet.publicKey,
@@ -96,15 +119,20 @@ export class SimplifiedNFTService {
         )
       );
 
-      // Create associated token account
-      transaction.add(
-        createAssociatedTokenAccountInstruction(
-          wallet.publicKey,
-          associatedTokenAccount,
-          wallet.publicKey,
-          mintAccount
-        )
-      );
+      // Create associated token account (only if it doesn't exist)
+      if (!existingATA) {
+        console.log('📝 Adding ATA creation instruction');
+        transaction.add(
+          createAssociatedTokenAccountInstruction(
+            wallet.publicKey,
+            associatedTokenAccount,
+            wallet.publicKey,
+            mintAccount
+          )
+        );
+      } else {
+        console.log('⏭️ Skipping ATA creation (already exists)');
+      }
 
       // Mint token to associated account
       transaction.add(
@@ -126,6 +154,28 @@ export class SimplifiedNFTService {
       
       // Then sign with wallet
       const signedTransaction = await wallet.signTransaction(transaction);
+      
+      // Step 5.5: SIMULATE TRANSACTION FIRST TO CATCH ERRORS
+      console.log('🧪 Simulating transaction to check for errors...');
+      try {
+        const simulationResult = await this.connection.simulateTransaction(signedTransaction);
+        
+        if (simulationResult.value.err) {
+          console.error('❌ Transaction simulation failed:', simulationResult.value.err);
+          console.error('📜 Simulation logs:', simulationResult.value.logs);
+          throw new Error(`Transaction simulation failed: ${JSON.stringify(simulationResult.value.err)}`);
+        }
+        
+        console.log('✅ Transaction simulation successful');
+        console.log('📊 Compute units used:', simulationResult.value.unitsConsumed);
+        if (simulationResult.value.logs && simulationResult.value.logs.length > 0) {
+          console.log('📜 Simulation logs:', simulationResult.value.logs.slice(-5)); // Show last 5 logs
+        }
+      } catch (simError) {
+        console.error('❌ Failed to simulate transaction:', simError);
+        throw new Error(`Transaction simulation failed: ${simError instanceof Error ? simError.message : simError}`);
+      }
+      
       const signature = await this.connection.sendRawTransaction(
         signedTransaction.serialize(),
         {
