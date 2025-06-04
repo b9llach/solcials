@@ -27,7 +27,7 @@ export default function Home() {
     
     if (heliusApiKey) {
       // Use WebSocket for real-time updates with Helius
-      console.log('🚀 Initializing WebSocket live updates with Helius');
+      console.log('🚀 initializing websocket live updates with helius');
       
       const service = createWebSocketLiveUpdateService(
         (newPosts: SocialPost[]) => {
