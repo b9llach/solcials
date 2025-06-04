@@ -5,9 +5,10 @@ import { useWallet } from '@solana/wallet-adapter-react';
 import { useRouter } from 'next/navigation';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { ThemeToggle } from './ThemeToggle';
 import ClientOnlyWalletButton from './ClientOnlyWalletButton';
-import { Search } from 'lucide-react';
+import { Search, Twitter } from 'lucide-react';
 
 export default function Header() {
   const wallet = useWallet();
@@ -72,6 +73,21 @@ export default function Header() {
 
           {/* Right Section - Theme Toggle & Wallet */}
           <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              asChild
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+            >
+              <a
+                href="https://x.com/solcialsonsol"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="follow us on twitter"
+              >
+                <Twitter className="h-4 w-4" />
+              </a>
+            </Button>
             <ThemeToggle />
             
             {/* Status indicator when not connected - Hidden on small mobile */}
