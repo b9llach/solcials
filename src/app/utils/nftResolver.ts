@@ -23,38 +23,70 @@ export class NFTResolver {
     }
 
     try {
-      // Extract the NFT address
-      const nftAddress = nftUrl.replace('nft:', '');
-      const nftPubkey = new PublicKey(nftAddress);
+      // Extract the address/CID part
+      const addressOrCid = nftUrl.replace('nft:', '');
+      
+      // Check if it's an IPFS CID (starts with 'baf' or 'Qm')
+      if (addressOrCid.startsWith('baf') || addressOrCid.startsWith('Qm')) {
+        console.log('🔍 Detected IPFS CID in NFT URL:', addressOrCid);
+        
+        // This is an IPFS metadata CID, resolve directly
+        try {
+          const metadataUrl = `https://gateway.lighthouse.storage/ipfs/${addressOrCid}`;
+          console.log('📋 Fetching NFT metadata from IPFS:', metadataUrl);
+          
+          const response = await fetch(metadataUrl);
+          if (response.ok) {
+            const metadata = await response.json();
+            console.log('✅ Retrieved NFT metadata from IPFS:', metadata);
+            
+            if (metadata.imageUrl) {
+              return metadata.imageUrl;
+            }
+          } else {
+            console.warn('⚠️ Failed to fetch metadata from IPFS, status:', response.status);
+          }
+        } catch (ipfsError) {
+          console.warn('⚠️ Error fetching metadata from IPFS:', ipfsError);
+        }
+        
+        // Fallback: treat the CID as an image CID
+        console.log('🔄 Treating CID as direct image reference');
+        return `https://gateway.lighthouse.storage/ipfs/${addressOrCid}`;
+      }
+      
+      // Otherwise, treat it as a Solana PublicKey
+      console.log('🔍 Detected Solana address in NFT URL:', addressOrCid);
+      const nftPubkey = new PublicKey(addressOrCid);
 
       // Check cache first
-      const cached = this.cache.get(nftAddress);
+      const cached = this.cache.get(addressOrCid);
       if (cached) {
         return cached.imageUrl;
       }
 
       // Check if there's already a pending request
-      let pendingRequest = this.pendingRequests.get(nftAddress);
+      let pendingRequest = this.pendingRequests.get(addressOrCid);
       if (!pendingRequest) {
         // Create new request with post content
         pendingRequest = this.fetchNFTMetadata(nftPubkey, postContent);
-        this.pendingRequests.set(nftAddress, pendingRequest);
+        this.pendingRequests.set(addressOrCid, pendingRequest);
       }
 
       // Wait for the request
       const result = await pendingRequest;
       
       // Clean up pending request
-      this.pendingRequests.delete(nftAddress);
+      this.pendingRequests.delete(addressOrCid);
 
       if (result) {
         // Cache the result
-        this.cache.set(nftAddress, result);
+        this.cache.set(addressOrCid, result);
         return result.imageUrl;
       }
 
       // Return placeholder if failed
-      const shortAddress = nftAddress.slice(0, 8);
+      const shortAddress = addressOrCid.slice(0, 8);
       return `data:image/svg+xml;base64,${btoa(`
         <svg width="400" height="300" xmlns="http://www.w3.org/2000/svg">
           <rect width="400" height="300" fill="#f9fafb"/>
