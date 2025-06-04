@@ -8,7 +8,6 @@ import {
 } from '@solana/web3.js';
 import { SocialPost } from '../types/social';
 import { getProgramId } from './networkConfig';
-import * as anchor from '@coral-xyz/anchor';
 import { sha256 } from 'js-sha256';
 
 // Your custom Solcials program ID from deployment
@@ -220,11 +219,15 @@ export class SolcialsCustomProgramService {
 
   // Derive PDA for post account
   private getPostPDA(author: PublicKey, timestamp: number): [PublicKey, number] {
+    // Encode timestamp exactly as Rust does: timestamp.to_le_bytes() for i64
+    const timestampBuffer = Buffer.alloc(8);
+    timestampBuffer.writeBigInt64LE(BigInt(timestamp));
+    
     return PublicKey.findProgramAddressSync(
       [
         Buffer.from('post'),
         author.toBuffer(),
-        new anchor.BN(timestamp).toArrayLike(Buffer, 'le', 8)
+        timestampBuffer  // Use the same encoding as in instruction data
       ],
       this.programId
     );
@@ -318,6 +321,17 @@ export class SolcialsCustomProgramService {
     const [postPDA] = this.getPostPDA(wallet.publicKey, timestamp);
     const [userProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
 
+    console.log('🕐 Timestamp debugging:');
+    console.log('  Raw timestamp (seconds):', timestamp);
+    console.log('  Timestamp as Date:', new Date(timestamp * 1000).toISOString());
+    console.log('  Timestamp BigInt:', BigInt(timestamp));
+    
+    // Show how we encode it for PDA vs instruction
+    const pdaTimestampBuffer = Buffer.alloc(8);
+    pdaTimestampBuffer.writeBigInt64LE(BigInt(timestamp));
+    console.log('  PDA timestamp buffer:', pdaTimestampBuffer.toString('hex'));
+    console.log('  Post PDA:', postPDA.toString());
+    
     // Check if post account already exists (collision detection)
     const existingPostAccount = await this.connection.getAccountInfo(postPDA);
     if (existingPostAccount) {
@@ -429,6 +443,11 @@ export class SolcialsCustomProgramService {
     const [postPDA] = this.getPostPDA(wallet.publicKey, timestamp);
     const [userProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
 
+    console.log('🕐 Image post timestamp debugging:');
+    console.log('  Raw timestamp (seconds):', timestamp);
+    console.log('  Timestamp as Date:', new Date(timestamp * 1000).toISOString());
+    console.log('  Post PDA:', postPDA.toString());
+    
     // Check if post account already exists (collision detection)
     const existingPostAccount = await this.connection.getAccountInfo(postPDA);
     if (existingPostAccount) {
