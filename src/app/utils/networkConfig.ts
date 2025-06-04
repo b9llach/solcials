@@ -105,7 +105,7 @@ export function getWebSocketEndpoint(): string | null {
  * Get the program ID from environment variables
  */
 export function getProgramId(): string {
-  return process.env.NEXT_PUBLIC_SOLCIALS_PROGRAM_ID || '2dMkuyNN2mUiSWyW1UGTRE7CkfULpudVdMCbASCChLpv';
+  return process.env.NEXT_PUBLIC_SOLCIALS_PROGRAM_ID || '7a6vstpjcuYDJDGiyvhkTCteZePCwpwDzucLCe2uacmY';
 }
 
 /**
