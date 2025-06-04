@@ -26,8 +26,7 @@ export default function Header() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      // TODO: Implement search functionality
-      console.log('Searching for:', searchQuery);
+      router.push(`/wallet/${searchQuery}`);
     }
   };
 
@@ -47,10 +46,10 @@ export default function Header() {
               </h1>
               <span className="hidden sm:inline text-base sm:text-xl font-bold text-foreground">|</span>
               <Badge variant="outline" className="text-xs hidden sm:inline-flex whitespace-nowrap">
-                testing in devnet
+                beta
               </Badge>
               <Badge variant="outline" className="text-xs sm:hidden">
-                devnet
+                beta
               </Badge>
             </button>
           </div>
@@ -62,7 +61,7 @@ export default function Header() {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
-                  placeholder="paste wallet or username"
+                  placeholder="paste wallet"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 bg-muted/50 border-0 focus:bg-background transition-colors"

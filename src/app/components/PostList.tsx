@@ -21,6 +21,7 @@ interface PostListProps {
   refreshTrigger: number;
   userFilter?: string; // Optional wallet address to filter posts by specific user
   feedType?: 'all' | 'following'; // Feed type for filtering
+  height?: string; // Optional height for the ScrollArea, defaults to calc(100vh-200px)
 }
 
 // Utility function to clean metadata from post content for display
@@ -29,7 +30,7 @@ const cleanContentForDisplay = (content: string): string => {
   return content.replace(/\n?__META:[a-zA-Z0-9]+__/g, '').trim();
 };
 
-export default function PostList({ refreshTrigger, userFilter, feedType = 'all' }: PostListProps) {
+export default function PostList({ refreshTrigger, userFilter, feedType = 'all', height = 'h-[calc(100vh-200px)]' }: PostListProps) {
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRequesting, setIsRequesting] = useState(false);
@@ -547,7 +548,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
 
   return (
     <>
-      <ScrollArea className="h-[calc(100vh-200px)] w-full max-w-4xl mx-auto">
+      <ScrollArea className={`${height} w-full max-w-4xl mx-auto`}>
         <div className="space-y-3 sm:space-y-4 p-2 sm:p-4">
           {filteredPosts.map((post) => {
             // Posts are now pre-filtered and parsed by the service

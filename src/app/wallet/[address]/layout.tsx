@@ -103,10 +103,12 @@ export async function generateMetadata({ params }: { params: Promise<{ address: 
 }
 
 // Layout component for wallet profile pages
+// This layout inherits WalletProvider from the root layout
 export default function WalletLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return children;
+  // Simply pass through children - WalletProvider is already available from root layout
+  return <>{children}</>;
 } 

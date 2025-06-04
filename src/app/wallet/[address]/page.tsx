@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import Header from '../../components/Header';
 import PostList from '../../components/PostList';
 import { 
@@ -50,12 +51,20 @@ interface UserProfile {
 export default function WalletProfilePage() {
   const params = useParams();
   const address = params.address as string;
-  const { publicKey, connected, signTransaction } = useWallet();
+  
+  // Use defensive checks for wallet context
+  const wallet = useWallet();
   const { connection } = useConnection();
+  
+  // Destructure wallet properties with defensive defaults
+  const publicKey = wallet?.publicKey || null;
+  const connected = wallet?.connected || false;
+  const signTransaction = wallet?.signTransaction;
   
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userPublicKey, setUserPublicKey] = useState<PublicKey | null>(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
   const [copied, setCopied] = useState(false);
   const [actualPostCount, setActualPostCount] = useState(0);
   const [followersData, setFollowersData] = useState<PublicKey[]>([]);
@@ -70,11 +79,16 @@ export default function WalletProfilePage() {
   const [isFollowing, setIsFollowing] = useState(false);
   const [isRequesting, setIsRequesting] = useState(false);
 
+  // Client-side mount effect
   useEffect(() => {
-    if (address) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (address && mounted) {
       loadWalletProfile();
     }
-  }, [address]);
+  }, [address, mounted]);
 
   const loadWalletProfile = async () => {
     try {
@@ -306,6 +320,27 @@ export default function WalletProfilePage() {
     });
   }, [likedPosts]);
 
+  // Show loading during SSR/hydration
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="container mx-auto px-4 py-8">
+          <div className="animate-pulse">
+            <div className="h-48 bg-muted rounded-lg mb-4"></div>
+            <div className="flex space-x-4">
+              <div className="w-24 h-24 bg-muted rounded-full"></div>
+              <div className="space-y-2 flex-1">
+                <div className="h-6 bg-muted rounded w-1/3"></div>
+                <div className="h-4 bg-muted rounded w-1/2"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -494,9 +529,7 @@ export default function WalletProfilePage() {
           </TabsList>
           
           <TabsContent value="posts" className="mt-6">
-            <div className="max-h-[500px] overflow-y-auto">
-              <PostList refreshTrigger={0} userFilter={userPublicKey.toString()} />
-            </div>
+            <PostList refreshTrigger={0} userFilter={userPublicKey.toString() } height="h-[60vh]" />
           </TabsContent>
           
           <TabsContent value="likes" className="mt-6">
@@ -508,8 +541,8 @@ export default function WalletProfilePage() {
                 </CardContent>
               </Card>
             ) : likedPosts.length > 0 ? (
-              <div className="max-h-[500px] overflow-y-auto">
-                <div className="space-y-4">
+              <ScrollArea className="h-[60vh] border rounded-lg">
+                <div className="p-4 space-y-4">
                   {likedPosts.map((post) => {
                     const userHandle = getUserHandle(post.author);
                     
@@ -573,7 +606,7 @@ export default function WalletProfilePage() {
                     );
                   })}
                 </div>
-              </div>
+              </ScrollArea>
             ) : (
               <Card>
                 <CardContent className="p-8 text-center">
@@ -594,8 +627,8 @@ export default function WalletProfilePage() {
                 </CardContent>
               </Card>
             ) : followingData.length > 0 ? (
-              <div className="max-h-[500px] overflow-y-auto">
-                <div className="space-y-2">
+              <ScrollArea className="h-[60vh] border rounded-lg">
+                <div className="p-4 space-y-2">
                   {followingData.map((userKey) => (
                     <Card key={userKey.toString()} className="p-4">
                       <div className="flex items-center justify-between">
@@ -615,7 +648,7 @@ export default function WalletProfilePage() {
                     </Card>
                   ))}
                 </div>
-              </div>
+              </ScrollArea>
             ) : (
               <Card>
                 <CardContent className="p-8 text-center">
@@ -636,8 +669,8 @@ export default function WalletProfilePage() {
                 </CardContent>
               </Card>
             ) : followersData.length > 0 ? (
-              <div className="max-h-[500px] overflow-y-auto">
-                <div className="space-y-2">
+              <ScrollArea className="h-[60vh] border rounded-lg">
+                <div className="p-4 space-y-2">
                   {followersData.map((userKey) => (
                     <Card key={userKey.toString()} className="p-4">
                       <div className="flex items-center justify-between">
@@ -657,7 +690,7 @@ export default function WalletProfilePage() {
                     </Card>
                   ))}
                 </div>
-              </div>
+              </ScrollArea>
             ) : (
               <Card>
                 <CardContent className="p-8 text-center">
