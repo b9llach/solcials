@@ -651,7 +651,8 @@ export class SolcialsCustomProgramService {
       const EXCLUDED_TRANSACTIONS = [
         'FETGTvVFBPx2c3ojK3wquiYm2vuCGei8rUkAVCjqPKib',
         '9KDtfGK4CHyDFuuNZKGDhr7BxTGZLTUqh9tjCJ5dZh1q',  // Problematic post with corrupted data
-        '6EJUGiAkUA1EBDbSeXKApqtQYuZ76usXwr7ELeAxu59S'   // Another problematic post with corrupted timestamp
+        '6EJUGiAkUA1EBDbSeXKApqtQYuZ76usXwr7ELeAxu59S',   // Another problematic post with corrupted timestamp
+        'DYkwu3bwpw761AXGSvwZ8p4BdJGycRnjwNEFdPUGtmfm'    // Yet another problematic post
       ];
 
       // Get all accounts owned by our program (remove filter for now)
