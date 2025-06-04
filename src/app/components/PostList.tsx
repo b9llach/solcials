@@ -907,27 +907,6 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
               </Card>
             );
           })}
-
-          {/* Load More Button */}
-          {posts.length >= 10 && (
-            <div className="text-center py-4">
-              <Button 
-                variant="outline" 
-                onClick={() => fetchPosts(true)}
-                disabled={isRequesting}
-                className="min-w-[120px]"
-              >
-                {isRequesting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Loading...
-                  </>
-                ) : (
-                  'Load More'
-                )}
-              </Button>
-            </div>
-          )}
         </div>
       </ScrollArea>
 
