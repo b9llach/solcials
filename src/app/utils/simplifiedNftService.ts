@@ -9,6 +9,7 @@ import {
   getMinimumBalanceForRentExemptMint,
 } from '@solana/spl-token';
 import { getLighthouseService } from './lighthouseService';
+import { getNetworkConfig } from './networkConfig';
 
 interface WalletAdapter {
   publicKey: PublicKey | null;
@@ -577,12 +578,17 @@ export class SimplifiedNFTService {
 let simplifiedNFTService: SimplifiedNFTService | null = null;
 
 export function getSimplifiedNFTService(): SimplifiedNFTService {
-  // We'll use a connection from the context when possible
-  // For now, we'll use devnet
+  // Use the same network configuration as the main app
+  const networkConfig = getNetworkConfig();
   const connection = new Connection(
-    process.env.NEXT_PUBLIC_SOLANA_RPC_URL || 'https://api.devnet.solana.com',
+    networkConfig.endpoint,
     'confirmed'
   );
+  
+  console.log('🔧 NFT Service Network Configuration:');
+  console.log('  Network:', networkConfig.displayName);
+  console.log('  RPC URL:', networkConfig.endpoint);
+  console.log('  Is Mainnet:', networkConfig.isMainnet);
   
   if (!simplifiedNFTService) {
     simplifiedNFTService = new SimplifiedNFTService(connection);
