@@ -650,7 +650,8 @@ export class SolcialsCustomProgramService {
       // Hard-coded filter for specific transaction to exclude
       const EXCLUDED_TRANSACTIONS = [
         'FETGTvVFBPx2c3ojK3wquiYm2vuCGei8rUkAVCjqPKib',
-        '9KDtfGK4CHyDFuuNZKGDhr7BxTGZLTUqh9tjCJ5dZh1q'  // Problematic post with corrupted data
+        '9KDtfGK4CHyDFuuNZKGDhr7BxTGZLTUqh9tjCJ5dZh1q',  // Problematic post with corrupted data
+        '6EJUGiAkUA1EBDbSeXKApqtQYuZ76usXwr7ELeAxu59S'   // Another problematic post with corrupted timestamp
       ];
 
       // Get all accounts owned by our program (remove filter for now)
@@ -771,11 +772,13 @@ export class SolcialsCustomProgramService {
           
           try {
             if (data.length >= offset + 24) {
-              likes = Number(data.readBigUint64LE(offset));
+              // Ensure we have a valid Buffer object and use defensive reading
+              const dataBuffer = Buffer.from(data);
+              likes = Number(dataBuffer.readBigUint64LE(offset));
               offset += 8;
-              reposts = Number(data.readBigUint64LE(offset));
+              reposts = Number(dataBuffer.readBigUint64LE(offset));
               offset += 8;
-              replies = Number(data.readBigUint64LE(offset));
+              replies = Number(dataBuffer.readBigUint64LE(offset));
               offset += 8;
             } else {
               // If not enough data, just skip the counts and use defaults
@@ -1209,16 +1212,18 @@ export class SolcialsCustomProgramService {
         // Read numeric fields
         if (data.length < offset + 8 * 4 + 1 + 1) return null; // 4 u64s + bool + u8
 
-        const followersCount = Number(data.readBigUInt64LE(offset));
+        // Use defensive buffer reading to prevent minification issues
+        const dataBuffer = Buffer.from(data);
+        const followersCount = Number(dataBuffer.readBigUInt64LE(offset));
         offset += 8;
         
-        const followingCount = Number(data.readBigUInt64LE(offset));
+        const followingCount = Number(dataBuffer.readBigUInt64LE(offset));
         offset += 8;
         
-        const postCount = Number(data.readBigUInt64LE(offset));
+        const postCount = Number(dataBuffer.readBigUInt64LE(offset));
         offset += 8;
         
-        const createdAt = Number(data.readBigInt64LE(offset));
+        const createdAt = Number(dataBuffer.readBigInt64LE(offset));
         offset += 8;
         
         const verified = data.readUInt8(offset) === 1;
@@ -1632,11 +1637,13 @@ export class SolcialsCustomProgramService {
               let likes = 0, reposts = 0, repliesCount = 0;
               try {
                 if (data.length >= offset + 24) {
-                  likes = Number(data.readBigUint64LE(offset));
+                  // Ensure we have a valid Buffer object and use defensive reading
+                  const dataBuffer = Buffer.from(data);
+                  likes = Number(dataBuffer.readBigUint64LE(offset));
                   offset += 8;
-                  reposts = Number(data.readBigUint64LE(offset));
+                  reposts = Number(dataBuffer.readBigUint64LE(offset));
                   offset += 8;
-                  repliesCount = Number(data.readBigUint64LE(offset));
+                  repliesCount = Number(dataBuffer.readBigUint64LE(offset));
                 }
               } catch {
                 // Use defaults if parsing fails
