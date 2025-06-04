@@ -363,9 +363,9 @@ export class SolcialsCustomProgramService {
 
     const instruction = new TransactionInstruction({
       keys: [
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author (must be signer)
         { pubkey: postPDA, isSigner: false, isWritable: true },
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
@@ -450,9 +450,9 @@ export class SolcialsCustomProgramService {
 
     const instruction = new TransactionInstruction({
       keys: [
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author (must be signer)
         { pubkey: postPDA, isSigner: false, isWritable: true },
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
       ],
       programId: this.programId,
