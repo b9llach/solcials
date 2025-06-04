@@ -39,10 +39,11 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
       console.warn('Failed to fetch author profile for metadata:', error);
     }
 
-    // Truncate content for description (Discord/Twitter limits)
-    const description = post.content.length > 200 
-      ? `${post.content.substring(0, 197)}...` 
-      : post.content;
+    // Truncate content for description (Discord/Twitter limits) and clean metadata
+    const cleanedContent = SolcialsCustomProgramService.cleanContentForDisplay(post.content);
+    const description = cleanedContent.length > 200 
+      ? `${cleanedContent.substring(0, 197)}...` 
+      : cleanedContent;
 
     const title = `${authorDisplayName} ${authorUsername}`;
     const siteName = 'solcials - post';
@@ -104,4 +105,4 @@ export default function PostLayout({
   children: React.ReactNode;
 }) {
   return children;
-} 
+}

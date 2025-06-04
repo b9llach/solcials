@@ -2245,14 +2245,24 @@ export class SolcialsCustomProgramService {
   /* eslint-enable @typescript-eslint/no-unused-vars */
 
   // Utility function to clean metadata from post content for display
-  private cleanContentForDisplay(content: string): string {
+  public static cleanContentForDisplay(content: string): string {
     // Remove the metadata CID reference from display content
     return content.replace(/\n?__META:[a-zA-Z0-9]+__/g, '').trim();
   }
 
   // Extract metadata CID from post content if present
-  private extractMetadataCidFromContent(content: string): string | null {
+  public static extractMetadataCidFromContent(content: string): string | null {
     const metaMatch = content.match(/__META:([a-zA-Z0-9]+)__/);
     return metaMatch ? metaMatch[1] : null;
+  }
+
+  // Utility function to clean metadata from post content for display
+  private cleanContentForDisplay(content: string): string {
+    return SolcialsCustomProgramService.cleanContentForDisplay(content);
+  }
+
+  // Extract metadata CID from post content if present
+  private extractMetadataCidFromContent(content: string): string | null {
+    return SolcialsCustomProgramService.extractMetadataCidFromContent(content);
   }
 } 
