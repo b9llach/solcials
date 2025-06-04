@@ -642,10 +642,16 @@ export class SolcialsCustomProgramService {
   // Get posts (fetch and parse from custom program)
   async getPosts(limit: number = 20): Promise<SocialPost[]> {
     return this.retryRequest(async () => {
-      console.log('🔍 Fetching posts from Solcials custom program...');
+      console.log('🔍 Fetching posts from Solcials custom program (VERSION: 2024-01-15-fix)...');
+      
+      // Force clear cache to ensure fresh data with updated PDA derivation
+      this.clearAccountsCache();
       
       // Hard-coded filter for specific transaction to exclude
-      const EXCLUDED_TRANSACTIONS = ['FETGTvVFBPx2c3ojK3wquiYm2vuCGei8rUkAVCjqPKib'];
+      const EXCLUDED_TRANSACTIONS = [
+        'FETGTvVFBPx2c3ojK3wquiYm2vuCGei8rUkAVCjqPKib',
+        '9KDtfGK4CHyDFuuNZKGDhr7BxTGZLTUqh9tjCJ5dZh1q'  // Problematic post with corrupted data
+      ];
 
       // Get all accounts owned by our program (remove filter for now)
       const accounts = await this.getAllProgramAccounts();
