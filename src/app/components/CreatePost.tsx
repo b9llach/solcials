@@ -182,12 +182,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
           // Step 1: Create the NFT
           const nftService = getSimplifiedNFTService();
           const { nftAddress, metadataCid } = await nftService.createImageNFT(
-            {
-              publicKey: wallet.publicKey,
-              signTransaction: wallet.signTransaction,
-              signAllTransactions: wallet.signAllTransactions,
-              connected: wallet.connected
-            },
+            wallet,
             selectedImage,
             content.trim()
           );

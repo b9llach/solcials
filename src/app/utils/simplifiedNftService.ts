@@ -11,9 +11,9 @@ import {
 import { getLighthouseService } from './lighthouseService';
 
 interface WalletAdapter {
-  publicKey: PublicKey;
-  signTransaction: ((transaction: Transaction) => Promise<Transaction>) | undefined;
-  signAllTransactions: ((transactions: Transaction[]) => Promise<Transaction[]>) | undefined;
+  publicKey: PublicKey | null;
+  signTransaction?: <T extends Transaction>(transaction: T) => Promise<T>;
+  signAllTransactions?: <T extends Transaction>(transactions: T[]) => Promise<T[]>;
   connected: boolean;
 }
 
@@ -46,8 +46,8 @@ export class SimplifiedNFTService {
     imageFile: File,
     caption: string
   ): Promise<SimplifiedNFTResult> {
-    if (!wallet.publicKey || !wallet.signTransaction) {
-      throw new Error('Wallet not properly connected');
+    if (!wallet.publicKey || !wallet.signTransaction || !wallet.connected) {
+      throw new Error('Wallet not connected');
     }
 
     try {
@@ -71,15 +71,15 @@ export class SimplifiedNFTService {
         wallet.publicKey
       );
 
-      // Step 3.5: CHECK WALLET BALANCE BEFORE CREATING TRANSACTION
-      console.log('💰 Checking wallet balance for NFT creation...');
+      // Step 3.5: CHECK WALLET BALANCE EXACTLY LIKE createTextPost
+      console.log('💰 Checking wallet balance for NFT creation (same as createTextPost)...');
       const walletBalance = await this.connection.getBalance(wallet.publicKey);
       const mintRent = await getMinimumBalanceForRentExemptMint(this.connection);
       const associatedTokenAccountRent = await this.connection.getMinimumBalanceForRentExemption(165); // ATA size
       const estimatedTxFee = 15000; // Conservative estimate for complex transaction
       const totalNeeded = mintRent + associatedTokenAccountRent + estimatedTxFee;
 
-      console.log('💰 NFT Creation Cost Breakdown:');
+      console.log('💰 NFT Creation Cost Breakdown (matching createTextPost format):');
       console.log('  Current balance:', walletBalance, 'lamports (', (walletBalance / 1000000000).toFixed(6), 'SOL)');
       console.log('  Mint account rent:', mintRent, 'lamports (', (mintRent / 1000000000).toFixed(6), 'SOL)');
       console.log('  ATA account rent:', associatedTokenAccountRent, 'lamports (', (associatedTokenAccountRent / 1000000000).toFixed(6), 'SOL)');
@@ -144,7 +144,7 @@ export class SimplifiedNFTService {
         )
       );
 
-      // Step 5: Send transaction
+      // Step 5: Send transaction (exactly like createTextPost)
       console.log('📡 Sending NFT creation transaction...');
       transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
       transaction.feePayer = wallet.publicKey;
@@ -152,7 +152,7 @@ export class SimplifiedNFTService {
       // Sign with mint keypair first
       transaction.partialSign(mintKeypair);
       
-      // Then sign with wallet
+      // Then sign with wallet (exactly like createTextPost does)
       const signedTransaction = await wallet.signTransaction(transaction);
       
       // Step 5.5: SIMULATE TRANSACTION FIRST TO CATCH ERRORS
@@ -184,7 +184,7 @@ export class SimplifiedNFTService {
         }
       );
 
-      // Step 6: Confirm transaction
+      // Step 6: Confirm transaction (like createTextPost)
       console.log('⏳ Confirming NFT creation...');
       await this.connection.confirmTransaction(signature, 'confirmed');
 
