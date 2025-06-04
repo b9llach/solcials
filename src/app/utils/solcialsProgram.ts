@@ -18,7 +18,6 @@ const INSTRUCTION_DISCRIMINATORS = {
   initializeUserProfile: Buffer.from(sha256.digest("global:initialize_user_profile")).slice(0, 8),
   createTextPost: Buffer.from(sha256.digest("global:create_text_post")).slice(0, 8),
   createImagePost: Buffer.from(sha256.digest("global:create_image_post")).slice(0, 8),
-  linkCnftToPost: Buffer.from(sha256.digest("global:link_cnft_to_post")).slice(0, 8),
   followUser: Buffer.from(sha256.digest("global:follow_user")).slice(0, 8),
   likePost: Buffer.from(sha256.digest("global:like_post")).slice(0, 8),
   updateUserProfile: Buffer.from(sha256.digest("global:update_user_profile")).slice(0, 8),
@@ -37,7 +36,8 @@ export interface CustomPost {
   author: PublicKey;
   content: string;
   postType: number; // 0 = text, 1 = image
-  imageNft: PublicKey | null; // cNFT address for image posts
+  imageChunks: PublicKey[]; // References to image chunk accounts
+  totalImageChunks: number; // Total number of image chunks
   replyTo: PublicKey | null;
   timestamp: number;
   likes: number;
@@ -511,7 +511,7 @@ export class SolcialsCustomProgramService {
 
     console.log('✅ Image post created (FREE!):', signature);
     
-    // Clear cache since we added new data
+    // Clear any cached data to reflect the new post
     this.clearAccountsCache();
     
     return signature;
@@ -726,27 +726,20 @@ export class SolcialsCustomProgramService {
           offset += 1;
 
           // Image NFT option (1 byte discriminator + optional 32 bytes)
+          if (data.length < offset + 4) continue;
+          const imageChunksLength = data.readUInt32LE(offset);
+          offset += 4;
+          
+          // Skip the actual pubkeys in the vector (32 bytes each)
+          const imageChunksSize = imageChunksLength * 32;
+          if (data.length < offset + imageChunksSize) continue;
+          offset += imageChunksSize;
+
+          // total_image_chunks: u8 (1 byte)
           if (data.length < offset + 1) continue;
-          const hasImageNft = data.readUInt8(offset);
+
+          const totalImageChunks = data.readUInt8(offset);
           offset += 1;
-          
-          let imageNft: PublicKey | undefined = undefined;
-          if (hasImageNft === 1) {
-            if (data.length < offset + 32) continue;
-            const imageNftBytes = data.slice(offset, offset + 32);
-            imageNft = new PublicKey(imageNftBytes);
-            offset += 32;
-          }
-          
-          // DEBUG: Log post content to see if metadata CID is present
-          if (imageNft) {
-            console.log('🔍 Image post content:', content);
-            if (content.includes('__META:')) {
-              console.log('✅ Found metadata CID in post content!');
-            } else {
-              console.log('❌ No metadata CID found in post content');
-            }
-          }
 
           // Reply to option (1 byte discriminator + optional 32 bytes)
           if (data.length < offset + 1) continue;
@@ -814,11 +807,20 @@ export class SolcialsCustomProgramService {
             replies,
             // Include replyTo if present
             ...(replyTo ? { replyTo } : {}),
-            // Add image data if it's an image post with cNFT
-            ...(postType === 1 && imageNft ? {
-              imageUrl: `nft:${imageNft.toString()}`, // Special format to indicate cNFT
-              imageHash: imageNft.toString(),
-              imageSize: 0
+            // Add image data - support BOTH cNFT (content-based) AND image chunks
+            ...(postType === 1 ? {
+              // Check if this is a cNFT post (has __META: in content) or chunks post
+              ...(content.includes('__META:') ? {
+                // cNFT post - extract metadata CID from content
+                imageUrl: `nft:${this.extractMetadataCidFromContent(content)}`,
+                imageHash: this.extractMetadataCidFromContent(content) || 'unknown',
+                imageSize: 0
+              } : totalImageChunks > 0 ? {
+                // Image chunks post
+                imageUrl: `chunks:${totalImageChunks}`,
+                imageHash: `chunks-${totalImageChunks}`,
+                imageSize: 0
+              } : {})
             } : {})
           };
 
@@ -2187,15 +2189,6 @@ export class SolcialsCustomProgramService {
     
     console.log('✅ Image post created (FREE!):', signature);
     
-    // Now link the cNFT to the post (with additional validation)
-    try {
-      await this.linkCNftToPost(wallet, postPDA, cnftAddress);
-    } catch (linkError) {
-      console.error('⚠️ Failed to link cNFT to post, but post was created:', linkError);
-      // Post was created successfully, but linking failed
-      // This is not a critical error since the post exists
-    }
-    
     // Clear any cached data to reflect the new post
     this.clearAccountsCache();
     
@@ -2203,45 +2196,15 @@ export class SolcialsCustomProgramService {
   }
 
   // Link cNFT to existing post
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   async linkCNftToPost(
-    wallet: WalletAdapter,
-    postPubkey: PublicKey,
-    cnftAddress: PublicKey
+    _wallet: WalletAdapter,
+    _postPubkey: PublicKey,
+    _cnftAddress: PublicKey
   ): Promise<string> {
-    if (!wallet.publicKey || !wallet.signTransaction || !wallet.connected) {
-      throw new Error('Wallet not connected');
-    }
-
-    // Create instruction data
-    const instructionData = Buffer.alloc(8 + 32);
-    let offset = 0;
-    
-    // Instruction discriminator for link_cnft_to_post
-    INSTRUCTION_DISCRIMINATORS.linkCnftToPost.copy(instructionData, offset);
-    offset += 8;
-    
-    // cNFT address
-    cnftAddress.toBuffer().copy(instructionData, offset);
-
-    const instruction = new TransactionInstruction({
-      keys: [
-        { pubkey: postPubkey, isSigner: false, isWritable: true },
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
-      ],
-      programId: this.programId,
-      data: instructionData,
-    });
-
-    const transaction = new Transaction().add(instruction);
-    transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
-    transaction.feePayer = wallet.publicKey;
-
-    const signedTransaction = await wallet.signTransaction(transaction);
-    const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
-
-    console.log('✅ cNFT linked to post:', signature);
-    return signature;
+    throw new Error('linkCNftToPost instruction not implemented in Rust program. Use createImagePostWithCNft instead, which stores cNFT metadata in the content field.');
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   // Utility function to clean metadata from post content for display
   private cleanContentForDisplay(content: string): string {
