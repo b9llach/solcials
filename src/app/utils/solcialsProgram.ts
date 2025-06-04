@@ -1311,6 +1311,16 @@ export class SolcialsCustomProgramService {
       throw new Error('Wallet not connected');
     }
 
+    // Check username availability if username is being updated
+    if (username) {
+      const usernameCheck = await this.isUsernameAvailable(username, wallet.publicKey);
+      if (!usernameCheck.available) {
+        throw new Error(`Username not available: ${usernameCheck.message}`);
+      }
+      
+      console.log('✅ Username availability verified:', usernameCheck.message);
+    }
+
     const [userProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
 
     // Check if profile exists
@@ -1351,7 +1361,11 @@ export class SolcialsCustomProgramService {
     const signedTransaction = await wallet.signTransaction(transaction);
     const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
 
-    console.log('✅ User profile updated:', signature);
+    console.log('✅ User profile updated with unique username:', signature);
+    
+    // Clear cache since we added new data
+    this.clearAccountsCache();
+    
     return signature;
   }
 
@@ -2264,5 +2278,64 @@ export class SolcialsCustomProgramService {
   // Extract metadata CID from post content if present
   private extractMetadataCidFromContent(content: string): string | null {
     return SolcialsCustomProgramService.extractMetadataCidFromContent(content);
+  }
+
+  // Check if username is available (case-insensitive)
+  async isUsernameAvailable(username: string, excludeUser?: PublicKey): Promise<{ available: boolean; message: string }> {
+    if (!username || username.trim() === '') {
+      return { available: false, message: 'Username cannot be empty' };
+    }
+
+    // Normalize username for comparison (lowercase, trimmed)
+    const normalizedUsername = username.toLowerCase().trim();
+
+    // Basic validation
+    if (normalizedUsername.length < 3) {
+      return { available: false, message: 'Username must be at least 3 characters long' };
+    }
+
+    if (normalizedUsername.length > 50) {
+      return { available: false, message: 'Username cannot be longer than 50 characters' };
+    }
+
+    // Check for invalid characters (only alphanumeric and underscore)
+    if (!/^[a-zA-Z0-9_]+$/.test(normalizedUsername)) {
+      return { available: false, message: 'Username can only contain letters, numbers, and underscores' };
+    }
+
+    // Reserved usernames
+    const reserved = ['admin', 'root', 'user', 'null', 'undefined', 'solcials', 'solana', 'about', 'help', 'support', 'api', 'www', 'mail', 'ftp', 'localhost', 'test'];
+    if (reserved.includes(normalizedUsername)) {
+      return { available: false, message: 'This username is reserved' };
+    }
+
+    try {
+      // Get all user profiles to check for duplicates
+      const allProfiles = await this.getAllUserProfiles();
+      
+      // Check if username is already taken (case-insensitive)
+      const existingUser = allProfiles.find(({ profile, pubkey }) => {
+        // Skip the current user if we're checking for updates
+        if (excludeUser && pubkey.equals(excludeUser)) {
+          return false;
+        }
+        
+        // Compare normalized usernames
+        const existingUsername = profile.username?.toLowerCase().trim();
+        return existingUsername === normalizedUsername;
+      });
+
+      if (existingUser) {
+        return { 
+          available: false, 
+          message: `Username "${username}" is already taken by ${existingUser.pubkey.toString().slice(0, 8)}...` 
+        };
+      }
+
+      return { available: true, message: `Username "${username}" is available!` };
+    } catch (error) {
+      console.error('Error checking username availability:', error);
+      return { available: false, message: 'Unable to check username availability. Please try again.' };
+    }
   }
 } 

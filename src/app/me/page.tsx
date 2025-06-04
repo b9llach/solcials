@@ -33,6 +33,7 @@ import {
   ExternalLink,
   Clock
 } from 'lucide-react';
+import { useUsernameValidation } from '../hooks/useUsernameValidation';
 
 // Phantom user to filter out
 const PHANTOM_USER_ID = "9xxZrmjp3WQH4vTKAtf4oKCb3SAaY3THuS2Fxt3T64uu";
@@ -67,6 +68,9 @@ export default function ProfilePage() {
     location: ''
   });
 
+  // Username validation hook - initialize with current username
+  const usernameValidation = useUsernameValidation(profile?.username || '');
+
   // Initialize edit form when profile loads
   useEffect(() => {
     if (profile) {
@@ -77,8 +81,18 @@ export default function ProfilePage() {
         websiteUrl: profile.websiteUrl || '',
         location: profile.location || ''
       });
+      // Initialize username validation with current username
+      usernameValidation.setUsername(profile.username || '');
     }
   }, [profile]);
+
+  // Update editForm.username when usernameValidation.username changes
+  useEffect(() => {
+    setEditForm(prev => ({
+      ...prev,
+      username: usernameValidation.username
+    }));
+  }, [usernameValidation.username]);
 
   // Fetch user profiles for liked posts
   useEffect(() => {
@@ -128,6 +142,12 @@ export default function ProfilePage() {
       return;
     }
 
+    // Additional check for username availability
+    if (editForm.username && !usernameValidation.canSave) {
+      setValidationErrors({ username: 'Please wait for username validation to complete or choose a different username' });
+      return;
+    }
+
     if (!publicKey || !signTransaction) {
       console.error('Wallet not properly connected');
       return;
@@ -166,18 +186,27 @@ export default function ProfilePage() {
       // Success message
       const successMsg = document.createElement('div');
       successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      successMsg.textContent = '✅ Profile updated successfully on Solana!';
+      successMsg.textContent = '✅ Profile updated successfully with unique username!';
       document.body.appendChild(successMsg);
       setTimeout(() => document.body.removeChild(successMsg), 4000);
       
-    } catch (error) {
-      console.error('Error updating profile:', error);
+    } catch (error: unknown) {
+      console.error('Failed to update profile:', error);
       
-      const errorMsg = document.createElement('div');
-      errorMsg.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      errorMsg.textContent = '❌ Failed to update profile. Please try again.';
-      document.body.appendChild(errorMsg);
-      setTimeout(() => document.body.removeChild(errorMsg), 3000);
+      // Check if it's a username availability error
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      if (errorMessage.includes('Username not available')) {
+        setValidationErrors({ username: errorMessage.replace('Username not available: ', '') });
+        // Recheck username availability
+        usernameValidation.recheckUsername();
+      } else {
+        // General error message
+        const errorMsg = document.createElement('div');
+        errorMsg.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+        errorMsg.textContent = `❌ Failed to update profile: ${errorMessage}`;
+        document.body.appendChild(errorMsg);
+        setTimeout(() => document.body.removeChild(errorMsg), 6000);
+      }
     } finally {
       setSaving(false);
     }
@@ -308,6 +337,66 @@ export default function ProfilePage() {
     }
   };
 
+  const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newUsername = e.target.value;
+    usernameValidation.setUsername(newUsername);
+    // Clear any existing username errors
+    if (validationErrors.username) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors.username;
+        return newErrors;
+      });
+    }
+  };
+
+  const handleFieldChange = (field: keyof typeof editForm, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+    
+    // Clear validation error for this field
+    if (validationErrors[field]) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+  };
+
+  const getUsernameInputClassName = () => {
+    const baseClass = "mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500";
+    
+    const validation = usernameValidation.getValidationStatus();
+    
+    switch (validation.status) {
+      case 'available':
+        return `${baseClass} border-green-500 bg-green-50`;
+      case 'unavailable':
+      case 'error':
+        return `${baseClass} border-red-500 bg-red-50`;
+      case 'checking':
+        return `${baseClass} border-yellow-500 bg-yellow-50`;
+      default:
+        return baseClass;
+    }
+  };
+
+  const getUsernameStatusIcon = () => {
+    const validation = usernameValidation.getValidationStatus();
+    
+    switch (validation.status) {
+      case 'available':
+        return <span className="text-green-600 text-sm">✅</span>;
+      case 'unavailable':
+      case 'error':
+        return <span className="text-red-600 text-sm">❌</span>;
+      case 'checking':
+        return <span className="text-yellow-600 text-sm animate-spin">⏳</span>;
+      default:
+        return null;
+    }
+  };
+
   if (!connected) {
     return (
       <div className="min-h-screen bg-background">
@@ -385,12 +474,33 @@ export default function ProfilePage() {
                     <div className="space-y-4">
                       <div>
                         <label className="text-sm font-medium">username</label>
-                        <Input
-                          value={editForm.username}
-                          onChange={(e) => setEditForm({...editForm, username: e.target.value})}
-                          placeholder="@username (3-20 chars, no spaces)"
-                          className={validationErrors.username ? 'border-red-500' : ''}
-                        />
+                        <div className="mt-1 relative">
+                          <input
+                            type="text"
+                            value={usernameValidation.username}
+                            onChange={handleUsernameChange}
+                            placeholder="Enter username (optional)"
+                            className={getUsernameInputClassName()}
+                          />
+                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
+                            {getUsernameStatusIcon()}
+                          </div>
+                        </div>
+                        {/* Username validation feedback */}
+                        {usernameValidation.username && (
+                          <div className="mt-1">
+                            {usernameValidation.getValidationStatus().status === 'available' && (
+                              <p className="text-green-600 text-xs">{usernameValidation.message}</p>
+                            )}
+                            {(usernameValidation.getValidationStatus().status === 'unavailable' || 
+                              usernameValidation.getValidationStatus().status === 'error') && (
+                              <p className="text-red-600 text-xs">{usernameValidation.message}</p>
+                            )}
+                            {usernameValidation.getValidationStatus().status === 'checking' && (
+                              <p className="text-yellow-600 text-xs">{usernameValidation.message}</p>
+                            )}
+                          </div>
+                        )}
                         {validationErrors.username && (
                           <div className="flex items-center mt-1 text-sm text-red-500">
                             <AlertCircle className="h-3 w-3 mr-1" />
@@ -402,7 +512,7 @@ export default function ProfilePage() {
                         <label className="text-sm font-medium">display name</label>
                         <Input
                           value={editForm.displayName}
-                          onChange={(e) => setEditForm({...editForm, displayName: e.target.value})}
+                          onChange={(e) => handleFieldChange('displayName', e.target.value)}
                           placeholder="Your display name"
                           className={validationErrors.displayName ? 'border-red-500' : ''}
                         />
@@ -417,7 +527,7 @@ export default function ProfilePage() {
                         <label className="text-sm font-medium">bio (max 160 chars)</label>
                         <Textarea
                           value={editForm.bio}
-                          onChange={(e) => setEditForm({...editForm, bio: e.target.value})}
+                          onChange={(e) => handleFieldChange('bio', e.target.value)}
                           placeholder="tell us about yourself..."
                           rows={3}
                           className={validationErrors.bio ? 'border-red-500' : ''}
@@ -438,7 +548,7 @@ export default function ProfilePage() {
                         <label className="text-sm font-medium">website</label>
                         <Input
                           value={editForm.websiteUrl}
-                          onChange={(e) => setEditForm({...editForm, websiteUrl: e.target.value})}
+                          onChange={(e) => handleFieldChange('websiteUrl', e.target.value)}
                           placeholder="https://your-website.com"
                           className={validationErrors.websiteUrl ? 'border-red-500' : ''}
                         />
@@ -453,7 +563,7 @@ export default function ProfilePage() {
                         <label className="text-sm font-medium">location</label>
                         <Input
                           value={editForm.location}
-                          onChange={(e) => setEditForm({...editForm, location: e.target.value})}
+                          onChange={(e) => handleFieldChange('location', e.target.value)}
                           placeholder="Your location"
                         />
                       </div>
