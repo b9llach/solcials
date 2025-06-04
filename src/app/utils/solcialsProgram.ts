@@ -332,28 +332,6 @@ export class SolcialsCustomProgramService {
     // Ensure user profile exists
     await this.ensureUserProfile(wallet);
 
-    // Calculate rent for post account (estimate based on post size)
-    const estimatedPostSize = 8 + 32 + 4 + content.length + 1 + 32 + 8 + 8 + 8 + 8 + 1; // Conservative estimate
-    let rentExemption: number;
-    
-    try {
-      rentExemption = await this.connection.getMinimumBalanceForRentExemption(estimatedPostSize);
-      
-      // Validate the rent exemption amount - it should be reasonable for mainnet
-      if (rentExemption < 1000000) { // Less than 0.001 SOL seems wrong for mainnet
-        console.warn(`⚠️ Rent exemption seems too low: ${rentExemption} lamports, using fallback calculation`);
-        
-        // Use fallback calculation: approximately 0.00144 SOL per account on mainnet
-        rentExemption = 1447680; // Conservative estimate for mainnet
-      }
-    } catch (error) {
-      console.error('❌ Failed to get rent exemption from RPC, using fallback:', error);
-      // Fallback for mainnet: approximately 0.00144 SOL per account
-      rentExemption = 1447680;
-    }
-    
-    console.log(`💰 Rent calculation: ${rentExemption} lamports (${rentExemption / 1e9} SOL) for post account size ${estimatedPostSize} bytes`);
-
     // Create instruction data
     const instructionData = Buffer.alloc(8 + 4 + Buffer.byteLength(content, 'utf8') + 8 + (replyTo ? 1 + 32 : 1));
     let offset = 0;
@@ -383,15 +361,6 @@ export class SolcialsCustomProgramService {
       instructionData.writeUInt8(0, offset); // None discriminator
     }
 
-    // Create the post account first with proper rent
-    const createAccountInstruction = SystemProgram.createAccount({
-      fromPubkey: wallet.publicKey,
-      newAccountPubkey: postPDA,
-      lamports: rentExemption,
-      space: estimatedPostSize,
-      programId: this.programId,
-    });
-
     const instruction = new TransactionInstruction({
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },
@@ -403,10 +372,8 @@ export class SolcialsCustomProgramService {
       data: instructionData,
     });
 
-    // Create transaction with both instructions
-    const transaction = new Transaction()
-      .add(createAccountInstruction)
-      .add(instruction);
+    // Create transaction with the program instruction (program handles account creation)
+    const transaction = new Transaction().add(instruction);
     
     transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
     transaction.feePayer = wallet.publicKey;
@@ -452,28 +419,6 @@ export class SolcialsCustomProgramService {
     // Ensure user profile exists
     await this.ensureUserProfile(wallet);
 
-    // Calculate rent for post account (estimate based on post size)
-    const estimatedPostSize = 8 + 32 + 4 + content.length + 1 + 32 + 8 + 8 + 8 + 8 + 1; // Conservative estimate
-    let rentExemption: number;
-    
-    try {
-      rentExemption = await this.connection.getMinimumBalanceForRentExemption(estimatedPostSize);
-      
-      // Validate the rent exemption amount - it should be reasonable for mainnet
-      if (rentExemption < 1000000) { // Less than 0.001 SOL seems wrong for mainnet
-        console.warn(`⚠️ Rent exemption seems too low: ${rentExemption} lamports, using fallback calculation`);
-        
-        // Use fallback calculation: approximately 0.00144 SOL per account on mainnet
-        rentExemption = 1447680; // Conservative estimate for mainnet
-      }
-    } catch (error) {
-      console.error('❌ Failed to get rent exemption from RPC, using fallback:', error);
-      // Fallback for mainnet: approximately 0.00144 SOL per account
-      rentExemption = 1447680;
-    }
-    
-    console.log(`💰 Rent calculation: ${rentExemption} lamports (${rentExemption / 1e9} SOL) for image post account size ${estimatedPostSize} bytes`);
-
     // Create instruction data (similar to text post)
     const instructionData = Buffer.alloc(8 + 4 + Buffer.byteLength(content, 'utf8') + 8 + (replyTo ? 1 + 32 : 1));
     let offset = 0;
@@ -503,15 +448,6 @@ export class SolcialsCustomProgramService {
       instructionData.writeUInt8(0, offset); // None discriminator
     }
 
-    // Create the post account first with proper rent
-    const createAccountInstruction = SystemProgram.createAccount({
-      fromPubkey: wallet.publicKey,
-      newAccountPubkey: postPDA,
-      lamports: rentExemption,
-      space: estimatedPostSize,
-      programId: this.programId,
-    });
-
     const instruction = new TransactionInstruction({
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },
@@ -523,10 +459,8 @@ export class SolcialsCustomProgramService {
       data: instructionData,
     });
 
-    // Create transaction with both instructions
-    const transaction = new Transaction()
-      .add(createAccountInstruction)
-      .add(instruction);
+    // Create transaction with the program instruction (program handles account creation)
+    const transaction = new Transaction().add(instruction);
     
     transaction.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
     transaction.feePayer = wallet.publicKey;
