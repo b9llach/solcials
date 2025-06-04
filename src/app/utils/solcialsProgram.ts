@@ -7,15 +7,12 @@ import {
   AccountInfo,
 } from '@solana/web3.js';
 import { SocialPost } from '../types/social';
-import { getProgramId, getPlatformTreasury } from './networkConfig';
+import { getProgramId } from './networkConfig';
 import * as anchor from '@coral-xyz/anchor';
 import { sha256 } from 'js-sha256';
 
 // Your custom Solcials program ID from deployment
 const SOLCIALS_PROGRAM_ID = new PublicKey(getProgramId());
-
-// Platform treasury for collecting fees - use environment variable
-const PLATFORM_TREASURY = new PublicKey(getPlatformTreasury());
 
 // Anchor instruction discriminators (8-byte SHA256 hash of "global:function_name")
 const INSTRUCTION_DISCRIMINATORS = {
@@ -68,7 +65,6 @@ export interface CustomUserProfile {
 export class SolcialsCustomProgramService {
   private connection: Connection;
   private programId: PublicKey;
-  private platformTreasury: PublicKey;
   
   // Rate limiting and retry logic
   private lastRequest = 0;
@@ -93,7 +89,6 @@ export class SolcialsCustomProgramService {
   constructor(connection: Connection) {
     this.connection = connection;
     this.programId = SOLCIALS_PROGRAM_ID;
-    this.platformTreasury = PLATFORM_TREASURY;
     
     // Validate connection on startup
     this.validateConnection();
@@ -335,18 +330,16 @@ export class SolcialsCustomProgramService {
     // Ensure user profile exists
     await this.ensureUserProfile(wallet);
 
-    // Check wallet balance before proceeding
+    // Check wallet balance (only need to cover rent exemption now - no platform fees!)
     const walletBalance = await this.connection.getBalance(wallet.publicKey);
     const ACCOUNT_SIZE = 8 + 32 + 4 + 280 + 1 + 4 + 1 + 32 + 8 + 8 + 8 + 8 + 1; // 395 bytes
     const rentExemption = await this.connection.getMinimumBalanceForRentExemption(ACCOUNT_SIZE);
-    const platformFee = 36400; // 1% fee for text posts
     const estimatedTxFee = 10000; // Conservative estimate for transaction fee
-    const totalNeeded = rentExemption + platformFee + estimatedTxFee;
+    const totalNeeded = rentExemption + estimatedTxFee; // No platform fees!
 
-    console.log('💰 Wallet balance check:');
+    console.log('💰 Wallet balance check (posts are now FREE!):');
     console.log('  Current balance:', walletBalance, 'lamports (', (walletBalance / 1000000000).toFixed(6), 'SOL)');
     console.log('  Rent exemption needed:', rentExemption, 'lamports');
-    console.log('  Platform fee:', platformFee, 'lamports');  
     console.log('  Estimated tx fee:', estimatedTxFee, 'lamports');
     console.log('  Total needed:', totalNeeded, 'lamports (', (totalNeeded / 1000000000).toFixed(6), 'SOL)');
     console.log('  Remaining after tx:', (walletBalance - totalNeeded), 'lamports');
@@ -358,7 +351,6 @@ export class SolcialsCustomProgramService {
     console.log('🔧 Preparing createTextPost instruction with accounts:');
     console.log('  📄 Post PDA:', postPDA.toString());
     console.log('  👤 User Profile PDA:', userProfilePDA.toString());
-    console.log('  💰 Platform Treasury:', this.platformTreasury.toString());
     console.log('  📝 Author (wallet):', wallet.publicKey.toString());
     console.log('  🔧 System Program:', SystemProgram.programId.toString());
 
@@ -395,7 +387,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },        // post
         { pubkey: userProfilePDA, isSigner: false, isWritable: true }, // user_profile
-        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
@@ -412,7 +403,7 @@ export class SolcialsCustomProgramService {
     const signedTransaction = await wallet.signTransaction(transaction);
     const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
 
-    console.log('✅ Text post created:', signature);
+    console.log('✅ Text post created (FREE!):', signature);
     
     // Clear cache since we added new data
     this.clearAccountsCache();
@@ -483,7 +474,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },        // post
         { pubkey: userProfilePDA, isSigner: false, isWritable: true }, // user_profile
-        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
@@ -500,7 +490,7 @@ export class SolcialsCustomProgramService {
     const signedTransaction = await wallet.signTransaction(transaction);
     const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
 
-    console.log('✅ Image post created:', signature);
+    console.log('✅ Image post created (FREE!):', signature);
     
     // Clear cache since we added new data
     this.clearAccountsCache();
@@ -1337,7 +1327,9 @@ export class SolcialsCustomProgramService {
         breakdown += `, Image chunks (${chunksNeeded}): ${(totalImageCost / 1e9).toFixed(4)} SOL`;
       }
       
-      // No platform fees - posts are free!
+      // Posts are completely FREE - no platform fees!
+      breakdown += ' (NO PLATFORM FEES - COMPLETELY FREE!)';
+      
       return {
         totalCost: totalStorageCost,
         breakdown
@@ -1348,7 +1340,7 @@ export class SolcialsCustomProgramService {
       const fallbackCost = hasImage ? 0.005 * 1e9 : 0.0015 * 1e9; // Convert to lamports
       return {
         totalCost: fallbackCost,
-        breakdown: hasImage ? '~0.005 SOL (estimated)' : '~0.0015 SOL (estimated)'
+        breakdown: hasImage ? '~0.005 SOL (estimated, FREE!)' : '~0.0015 SOL (estimated, FREE!)'
       };
     }
   }
@@ -1518,7 +1510,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPda, isSigner: false, isWritable: true },
         { pubkey: userProfilePda, isSigner: false, isWritable: true },
-        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
@@ -1533,7 +1524,7 @@ export class SolcialsCustomProgramService {
     const signature = await this.connection.sendRawTransaction(signedTransaction.serialize());
     await this.connection.confirmTransaction(signature, 'confirmed');
 
-    console.log('✅ Image reply created successfully!', signature);
+    console.log('✅ Image reply created successfully (FREE!)!', signature);
     return signature;
   }
 
@@ -2144,7 +2135,6 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
         { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
@@ -2162,7 +2152,7 @@ export class SolcialsCustomProgramService {
 
     await this.connection.confirmTransaction(signature, 'confirmed');
     
-    console.log('✅ Image post created:', signature);
+    console.log('✅ Image post created (FREE!):', signature);
     
     // Now link the cNFT to the post (with additional validation)
     try {
