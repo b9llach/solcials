@@ -224,8 +224,11 @@ export class SimplifiedNFTService {
 
   // Extract metadata CID from post content if present
   private extractMetadataCidFromPost(postContent: string): string | null {
+    console.log('🔍 Extracting metadata CID from post content:', postContent);
     const metaMatch = postContent.match(/__META:([a-zA-Z0-9]+)__/);
-    return metaMatch ? metaMatch[1] : null;
+    const result = metaMatch ? metaMatch[1] : null;
+    console.log('📋 Extracted metadata CID:', result);
+    return result;
   }
 
   // Get NFT metadata from local storage, IPFS, or post content
@@ -242,6 +245,9 @@ export class SimplifiedNFTService {
 
       // If post content is provided, try to extract metadata CID from it
       if (postContent) {
+        console.log('🔍 Checking post content for metadata CID. Content length:', postContent.length);
+        console.log('📝 Post content preview:', postContent.substring(0, 200) + (postContent.length > 200 ? '...' : ''));
+        
         const metadataCid = this.extractMetadataCidFromPost(postContent);
         if (metadataCid) {
           try {
@@ -249,11 +255,12 @@ export class SimplifiedNFTService {
             
             // Fetch metadata from IPFS
             const metadataUrl = `https://gateway.lighthouse.storage/ipfs/${metadataCid}`;
+            console.log('🌐 Fetching metadata from:', metadataUrl);
             const response = await fetch(metadataUrl);
             
             if (response.ok) {
               const ipfsMetadata = await response.json() as NFTMetadata;
-              console.log('✅ Successfully fetched NFT metadata from IPFS via post content');
+              console.log('✅ Successfully fetched NFT metadata from IPFS via post content:', ipfsMetadata);
               
               // Cache it locally for next time
               localStorage.setItem(key, JSON.stringify(ipfsMetadata));
@@ -264,10 +271,14 @@ export class SimplifiedNFTService {
           } catch (ipfsError) {
             console.warn('⚠️ Error fetching metadata from IPFS via post content:', ipfsError);
           }
+        } else {
+          console.log('❌ No metadata CID found in post content');
         }
+      } else {
+        console.log('❌ No post content provided for metadata extraction');
       }
 
-      // If not found locally, try to fetch from IPFS using metadata reference
+      // If not found in IPFS references, try blockchain fallback
       console.log('🔍 Attempting to fetch NFT metadata from IPFS reference:', mintAddress.toString());
       const metadataRef = localStorage.getItem(`nft_metadata_ref_${mintAddress.toString()}`);
       

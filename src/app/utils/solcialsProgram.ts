@@ -590,6 +590,16 @@ export class SolcialsCustomProgramService {
           if (data.length < offset + contentLength) continue;
           const content = data.slice(offset, offset + contentLength).toString('utf8');
           offset += contentLength;
+          
+          // DEBUG: Log post content to see if metadata CID is present
+          if (imageNft) {
+            console.log('🔍 Image post content:', content);
+            if (content.includes('__META:')) {
+              console.log('✅ Found metadata CID in post content!');
+            } else {
+              console.log('❌ No metadata CID found in post content');
+            }
+          }
 
           // Post type (1 byte)
           if (data.length < offset + 1) continue;
@@ -607,6 +617,16 @@ export class SolcialsCustomProgramService {
             const imageNftBytes = data.slice(offset, offset + 32);
             imageNft = new PublicKey(imageNftBytes);
             offset += 32;
+          }
+          
+          // DEBUG: Log post content to see if metadata CID is present
+          if (imageNft) {
+            console.log('🔍 Image post content:', content);
+            if (content.includes('__META:')) {
+              console.log('✅ Found metadata CID in post content!');
+            } else {
+              console.log('❌ No metadata CID found in post content');
+            }
           }
 
           // Reply to option (1 byte discriminator + optional 32 bytes)
