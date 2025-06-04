@@ -30,6 +30,9 @@ const cleanContentForDisplay = (content: string): string => {
   return content.replace(/\n?__META:[a-zA-Z0-9]+__/g, '').trim();
 };
 
+// Phantom user to filter out
+const PHANTOM_USER_ID = "9xxZrmjp3WQH4vTKAtf4oKCb3SAaY3THuS2Fxt3T64uu";
+
 export default function PostList({ refreshTrigger, userFilter, feedType = 'all', height = 'h-[calc(100vh-200px)]' }: PostListProps) {
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -157,9 +160,11 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
           }
           
           const followingList = await socialService.getFollowing(wallet.publicKey);
-          setFollowing(followingList);
+          // Filter out phantom users
+          const filteredFollowing = followingList.filter(pk => pk.toString() !== PHANTOM_USER_ID);
+          setFollowing(filteredFollowing);
           // Cache following list
-          setCachedData(`following_${wallet.publicKey.toString()}`, followingList.map(pk => pk.toString()));
+          setCachedData(`following_${wallet.publicKey.toString()}`, filteredFollowing.map(pk => pk.toString()));
         } catch (error) {
           console.warn('Error fetching following list:', error);
           setFollowing([]);
@@ -445,7 +450,9 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
         const cachedFollowing = getCachedData(`following_${wallet.publicKey.toString()}`, 300000); // 5 min cache
         if (cachedFollowing && Array.isArray(cachedFollowing)) {
           try {
-            const followingKeys = cachedFollowing.map((keyStr: string) => new PublicKey(keyStr));
+            const followingKeys = cachedFollowing
+              .filter((keyStr: string) => keyStr !== PHANTOM_USER_ID) // Filter out phantom user
+              .map((keyStr: string) => new PublicKey(keyStr));
             setFollowing(followingKeys);
           } catch (error) {
             console.warn('Error loading cached following list:', error);

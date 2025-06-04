@@ -221,9 +221,6 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
         {/* Original Post Context */}
         <div className="p-3 bg-muted/20 rounded-lg border-l-2 border-primary/30">
           <div className="flex items-center space-x-2 mb-2">
-            <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white text-xs font-bold">
-              {post.author.toString().slice(0, 2).toUpperCase()}
-            </div>
             <span className="text-sm font-medium">{getUserDisplayName(post.author)}</span>
             {originalHandle && (
               <span className="text-xs text-muted-foreground">@{originalHandle}</span>

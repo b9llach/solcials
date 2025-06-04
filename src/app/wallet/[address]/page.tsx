@@ -34,6 +34,9 @@ import {
 } from 'lucide-react';
 import { Toast } from '../../utils/toast';
 
+// Phantom user to filter out
+const PHANTOM_USER_ID = "9xxZrmjp3WQH4vTKAtf4oKCb3SAaY3THuS2Fxt3T64uu";
+
 interface UserProfile {
   user: PublicKey;
   username?: string;
@@ -176,12 +179,26 @@ export default function WalletProfilePage() {
       if (isFollowing) {
         await solcialsProgram.unfollowUser({ publicKey, signTransaction, connected }, userPublicKey);
         setIsFollowing(false);
+        
+        // Update local follower count
+        setProfile(prev => prev ? {...prev, followersCount: Math.max(0, prev.followersCount - 1)} : null);
+        
         Toast.success('Successfully unfollowed user!');
       } else {
         await solcialsProgram.followUser({ publicKey, signTransaction, connected }, userPublicKey);
         setIsFollowing(true);
+        
+        // Update local follower count
+        setProfile(prev => prev ? {...prev, followersCount: prev.followersCount + 1} : null);
+        
         Toast.success('Successfully followed user!');
       }
+      
+      // Refresh follower data if it's been loaded
+      if (followersData.length > 0) {
+        loadFollowersData();
+      }
+      
     } catch (error) {
       console.error('Error following/unfollowing user:', error);
       
@@ -212,6 +229,11 @@ export default function WalletProfilePage() {
       const solcialsProgram = new SolcialsCustomProgramService(connection);
       const followers = await solcialsProgram.getFollowers(userPublicKey);
       setFollowersData(followers);
+      
+      // Fetch user profiles for all followers
+      followers.forEach(followerKey => {
+        fetchUserProfile(followerKey);
+      });
     } catch (error) {
       console.error('Error loading followers:', error);
     } finally {
@@ -226,7 +248,14 @@ export default function WalletProfilePage() {
       setLoadingFollowing(true);
       const solcialsProgram = new SolcialsCustomProgramService(connection);
       const following = await solcialsProgram.getFollowing(userPublicKey);
-      setFollowingData(following);
+      // Filter out phantom users
+      const filteredFollowing = following.filter(pk => pk.toString() !== PHANTOM_USER_ID);
+      setFollowingData(filteredFollowing);
+      
+      // Fetch user profiles for all following
+      filteredFollowing.forEach(followingKey => {
+        fetchUserProfile(followingKey);
+      });
     } catch (error) {
       console.error('Error loading following:', error);
     } finally {
@@ -293,6 +322,10 @@ export default function WalletProfilePage() {
     const postUrl = `${window.location.origin}/post/${post.signature}`;
     setShareUrl(postUrl);
     setShareDialogOpen(true);
+  };
+
+  const handleViewProfile = (userKey: PublicKey) => {
+    window.location.href = `/wallet/${userKey.toString()}`;
   };
 
   const copyToClipboard = async () => {
@@ -460,7 +493,7 @@ export default function WalletProfilePage() {
             )}
           </div>
 
-          <div className="flex space-x-6">
+          {/* <div className="flex space-x-6">
             <div className="flex items-center space-x-1">
               <span className="font-semibold">{profile.followersCount.toLocaleString()}</span>
               <span className="text-muted-foreground">followers</span>
@@ -469,7 +502,7 @@ export default function WalletProfilePage() {
               <span className="font-semibold">{profile.followingCount.toLocaleString()}</span>
               <span className="text-muted-foreground">following</span>
             </div>
-          </div>
+          </div> */}
 
           {/* Wallet Address */}
           <div className="flex items-center space-x-2 p-3 bg-muted rounded-lg">
@@ -633,15 +666,17 @@ export default function WalletProfilePage() {
                     <Card key={userKey.toString()} className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {userKey.toString().slice(0, 2).toUpperCase()}
-                          </div>
                           <div>
-                            <p className="font-medium text-sm">{getUserDisplayName(userKey)}</p>
+                            <button 
+                              onClick={() => handleViewProfile(userKey)}
+                              className="font-medium text-sm hover:text-primary transition-colors text-left"
+                            >
+                              {getUserDisplayName(userKey)}
+                            </button>
                             <p className="text-xs text-muted-foreground">@{getUserHandle(userKey)}</p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleViewProfile(userKey)}>
                           view profile
                         </Button>
                       </div>
@@ -675,15 +710,17 @@ export default function WalletProfilePage() {
                     <Card key={userKey.toString()} className="p-4">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {userKey.toString().slice(0, 2).toUpperCase()}
-                          </div>
                           <div>
-                            <p className="font-medium text-sm">{getUserDisplayName(userKey)}</p>
+                            <button 
+                              onClick={() => handleViewProfile(userKey)}
+                              className="font-medium text-sm hover:text-primary transition-colors text-left"
+                            >
+                              {getUserDisplayName(userKey)}
+                            </button>
                             <p className="text-xs text-muted-foreground">@{getUserHandle(userKey)}</p>
                           </div>
                         </div>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => handleViewProfile(userKey)}>
                           view profile
                         </Button>
                       </div>
