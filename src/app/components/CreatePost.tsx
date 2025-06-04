@@ -237,8 +237,8 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
       
       // Success feedback
       Toast.success(selectedImage 
-        ? 'Image post created with NFT!' 
-        : 'Text post created!'
+        ? 'image post created as an nft!' 
+        : 'text post created!'
       );
       
     } catch (error) {
@@ -253,16 +253,16 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
         });
         
         if (error.message.includes('Lighthouse')) {
-          Toast.error('Image upload failed. Please check your internet connection and try again.');
+          Toast.error('image upload failed. please check your internet connection and try again.');
         } else if (error.message.includes('User profile')) {
-          Toast.info('Creating your user profile first, then try posting again.');
+          Toast.info('creating your user profile first, then try posting again.');
         } else if (error.message.includes('API key')) {
-          Toast.error('Image upload service unavailable. Please try posting without an image.');
+          Toast.error('image upload service unavailable. please try posting without an image.');
         } else {
-          Toast.error('Failed to create post. Please try again.');
+          Toast.error('failed to create post. please try again.');
         }
       } else {
-        Toast.error('Failed to create post. Please try again.');
+        Toast.error('failed to create post. please try again.');
       }
     } finally {
       setIsPosting(false);
@@ -443,9 +443,6 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
                         </div>
                       </div>
                     </div>
-                    <div className="text-orange-600 dark:text-orange-400 font-medium flex-shrink-0 text-xs sm:text-sm">
-                      {getPostCostDisplay()}
-                    </div>
                   </div>
                 </div>
               )}
@@ -543,9 +540,6 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
                 )}
               </div>
               <div className="text-right flex-shrink-0">
-                <div className="text-xs text-muted-foreground whitespace-nowrap">
-                  cost: {getPostCostDisplay()}
-                </div>
               </div>
             </div>
             
@@ -554,7 +548,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
               <div className="mt-2 pt-2 border-t border-border/30 overflow-hidden">
                 <div className="flex items-start justify-between text-xs gap-2">
                   <div className="flex items-center space-x-2 text-muted-foreground min-w-0 flex-1">
-                    <span className="flex-shrink-0">Lighthouse:</span>
+                    <span className="flex-shrink-0">lighthouse:</span>
                     {loadingLighthouse ? (
                       <Loader2 className="h-3 w-3 animate-spin flex-shrink-0" />
                     ) : (
