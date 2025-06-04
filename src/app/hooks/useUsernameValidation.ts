@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { Connection } from '@solana/web3.js';
 import { SolcialsCustomProgramService } from '../utils/solcialsProgram';
@@ -7,8 +7,7 @@ import { getNetworkConfig } from '../utils/networkConfig';
 interface UsernameValidationState {
   username: string;
   isChecking: boolean;
-  isAvailable: boolean | null;
-  message: string;
+  lastCheckResult: { available: boolean; message: string } | null;
   error: string | null;
 }
 
@@ -17,22 +16,14 @@ export function useUsernameValidation(initialUsername: string = '') {
   const [state, setState] = useState<UsernameValidationState>({
     username: initialUsername,
     isChecking: false,
-    isAvailable: null,
-    message: '',
+    lastCheckResult: null,
     error: null
   });
 
-  // Debounced username checking
-  const checkUsername = useCallback(async (username: string) => {
+  // Manual username checking (only called when needed)
+  const checkUsername = useCallback(async (username: string): Promise<{ available: boolean; message: string }> => {
     if (!username || username.trim() === '') {
-      setState(prev => ({
-        ...prev,
-        isChecking: false,
-        isAvailable: null,
-        message: '',
-        error: null
-      }));
-      return;
+      return { available: true, message: 'No username provided' };
     }
 
     setState(prev => ({
@@ -51,84 +42,57 @@ export function useUsernameValidation(initialUsername: string = '') {
       setState(prev => ({
         ...prev,
         isChecking: false,
-        isAvailable: result.available,
-        message: result.message,
+        lastCheckResult: result,
         error: null
       }));
+
+      return result;
     } catch (error) {
       console.error('Username validation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to check username availability';
+      
       setState(prev => ({
         ...prev,
         isChecking: false,
-        isAvailable: false,
-        message: '',
-        error: error instanceof Error ? error.message : 'Failed to check username availability'
+        lastCheckResult: null,
+        error: errorMessage
       }));
+
+      throw new Error(errorMessage);
     }
   }, [publicKey]);
 
-  // Debounce username checking
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (state.username && state.username.trim() !== '') {
-        checkUsername(state.username);
-      }
-    }, 500); // 500ms delay
-
-    return () => clearTimeout(timeoutId);
-  }, [state.username, checkUsername]);
-
-  // Update username and trigger validation
+  // Update username (no automatic validation)
   const setUsername = useCallback((username: string) => {
     setState(prev => ({
       ...prev,
       username,
-      isAvailable: null,
-      message: '',
+      lastCheckResult: null,
       error: null
     }));
   }, []);
 
-  // Force re-check current username
-  const recheckUsername = useCallback(() => {
-    if (state.username) {
-      checkUsername(state.username);
-    }
-  }, [state.username, checkUsername]);
-
-  // Get validation status for UI
-  const getValidationStatus = useCallback(() => {
-    if (state.error) {
-      return { status: 'error' as const, message: state.error };
-    }
+  // Basic client-side validation (for immediate feedback)
+  const getBasicValidation = useCallback((username: string) => {
+    if (!username) return { isValid: true, message: '' };
     
-    if (state.isChecking) {
-      return { status: 'checking' as const, message: 'Checking availability...' };
-    }
+    if (username.length < 3) return { isValid: false, message: 'Username must be at least 3 characters' };
+    if (username.length > 50) return { isValid: false, message: 'Username cannot be longer than 50 characters' };
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) return { isValid: false, message: 'Username can only contain letters, numbers, and underscores' };
     
-    if (state.isAvailable === true) {
-      return { status: 'available' as const, message: state.message };
-    }
+    const reserved = ['admin', 'root', 'user', 'null', 'undefined', 'solcials', 'solana', 'about', 'help', 'support', 'api', 'www', 'mail', 'ftp', 'localhost', 'test'];
+    if (reserved.includes(username.toLowerCase())) return { isValid: false, message: 'This username is reserved' };
     
-    if (state.isAvailable === false) {
-      return { status: 'unavailable' as const, message: state.message };
-    }
-    
-    return { status: 'idle' as const, message: '' };
-  }, [state]);
+    return { isValid: true, message: '' };
+  }, []);
 
   return {
     username: state.username,
     setUsername,
     isChecking: state.isChecking,
-    isAvailable: state.isAvailable,
-    message: state.message,
-    error: state.error,
-    recheckUsername,
-    getValidationStatus,
-    // Helper computed properties
-    canSave: state.isAvailable === true && !state.isChecking,
-    showSpinner: state.isChecking,
-    hasError: !!state.error || state.isAvailable === false
+    checkUsername, // Manual check function
+    getBasicValidation, // Client-side validation
+    lastCheckResult: state.lastCheckResult,
+    error: state.error
   };
 } 

@@ -34,6 +34,7 @@ import {
   Clock
 } from 'lucide-react';
 import { useUsernameValidation } from '../hooks/useUsernameValidation';
+import { Toast } from '../utils/toast';
 
 // Phantom user to filter out
 const PHANTOM_USER_ID = "9xxZrmjp3WQH4vTKAtf4oKCb3SAaY3THuS2Fxt3T64uu";
@@ -86,14 +87,6 @@ export default function ProfilePage() {
     }
   }, [profile]);
 
-  // Update editForm.username when usernameValidation.username changes
-  useEffect(() => {
-    setEditForm(prev => ({
-      ...prev,
-      username: usernameValidation.username
-    }));
-  }, [usernameValidation.username]);
-
   // Fetch user profiles for liked posts
   useEffect(() => {
     likedPosts.forEach(post => {
@@ -101,24 +94,15 @@ export default function ProfilePage() {
     });
   }, [likedPosts]);
 
-  const validateUsername = (username: string): string | null => {
-    if (!username) return null; // Username is optional
-    
-    if (username.length < 3) return 'Username must be at least 3 characters';
-    if (username.length > 20) return 'Username must be 20 characters or less';
-    if (/\s/.test(username)) return 'Username cannot contain spaces';
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) return 'Username can only contain letters, numbers, and underscores';
-    if (username.startsWith('_') || username.endsWith('_')) return 'Username cannot start or end with underscore';
-    
-    return null;
-  };
-
   const validateForm = () => {
     const errors: {[key: string]: string} = {};
     
+    // Basic client-side validation for username
     if (editForm.username) {
-      const usernameError = validateUsername(editForm.username);
-      if (usernameError) errors.username = usernameError;
+      const basicValidation = usernameValidation.getBasicValidation(editForm.username);
+      if (!basicValidation.isValid) {
+        errors.username = basicValidation.message;
+      }
     }
     
     if (editForm.displayName.length > 50) {
@@ -142,12 +126,6 @@ export default function ProfilePage() {
       return;
     }
 
-    // Additional check for username availability
-    if (editForm.username && !usernameValidation.canSave) {
-      setValidationErrors({ username: 'Please wait for username validation to complete or choose a different username' });
-      return;
-    }
-
     if (!publicKey || !signTransaction) {
       console.error('Wallet not properly connected');
       return;
@@ -155,6 +133,24 @@ export default function ProfilePage() {
 
     try {
       setSaving(true);
+      
+      // Check username availability if username is provided and changed
+      if (editForm.username && editForm.username !== profile?.username) {
+        try {
+          const result = await usernameValidation.checkUsername(editForm.username);
+          if (!result.available) {
+            Toast.error(`Username not available: ${result.message}`);
+            setValidationErrors({ username: result.message });
+            return;
+          } else {
+            Toast.success(`✅ ${result.message}`);
+          }
+        } catch {
+          Toast.error('Failed to check username availability');
+          return;
+        }
+      }
+
       const solcialsProgram = new SolcialsCustomProgramService(connection);
       
       // Update profile with form data using the real Solana program
@@ -183,12 +179,8 @@ export default function ProfilePage() {
       setEditing(false);
       setValidationErrors({});
       
-      // Success message
-      const successMsg = document.createElement('div');
-      successMsg.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-      successMsg.textContent = '✅ Profile updated successfully with unique username!';
-      document.body.appendChild(successMsg);
-      setTimeout(() => document.body.removeChild(successMsg), 4000);
+      // Success toast
+      Toast.success('Profile updated successfully!');
       
     } catch (error: unknown) {
       console.error('Failed to update profile:', error);
@@ -197,15 +189,9 @@ export default function ProfilePage() {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       if (errorMessage.includes('Username not available')) {
         setValidationErrors({ username: errorMessage.replace('Username not available: ', '') });
-        // Recheck username availability
-        usernameValidation.recheckUsername();
+        Toast.error(errorMessage);
       } else {
-        // General error message
-        const errorMsg = document.createElement('div');
-        errorMsg.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-        errorMsg.textContent = `❌ Failed to update profile: ${errorMessage}`;
-        document.body.appendChild(errorMsg);
-        setTimeout(() => document.body.removeChild(errorMsg), 6000);
+        Toast.error(`Failed to update profile: ${errorMessage}`);
       }
     } finally {
       setSaving(false);
@@ -340,6 +326,8 @@ export default function ProfilePage() {
   const handleUsernameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newUsername = e.target.value;
     usernameValidation.setUsername(newUsername);
+    setEditForm(prev => ({ ...prev, username: newUsername }));
+    
     // Clear any existing username errors
     if (validationErrors.username) {
       setValidationErrors(prev => {
@@ -360,40 +348,6 @@ export default function ProfilePage() {
         delete newErrors[field];
         return newErrors;
       });
-    }
-  };
-
-  const getUsernameInputClassName = () => {
-    const baseClass = "mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500";
-    
-    const validation = usernameValidation.getValidationStatus();
-    
-    switch (validation.status) {
-      case 'available':
-        return `${baseClass} border-green-500 bg-green-50`;
-      case 'unavailable':
-      case 'error':
-        return `${baseClass} border-red-500 bg-red-50`;
-      case 'checking':
-        return `${baseClass} border-yellow-500 bg-yellow-50`;
-      default:
-        return baseClass;
-    }
-  };
-
-  const getUsernameStatusIcon = () => {
-    const validation = usernameValidation.getValidationStatus();
-    
-    switch (validation.status) {
-      case 'available':
-        return <span className="text-green-600 text-sm">✅</span>;
-      case 'unavailable':
-      case 'error':
-        return <span className="text-red-600 text-sm">❌</span>;
-      case 'checking':
-        return <span className="text-yellow-600 text-sm animate-spin">⏳</span>;
-      default:
-        return null;
     }
   };
 
@@ -474,33 +428,12 @@ export default function ProfilePage() {
                     <div className="space-y-4">
                       <div>
                         <label className="text-sm font-medium">username</label>
-                        <div className="mt-1 relative">
-                          <input
-                            type="text"
-                            value={usernameValidation.username}
-                            onChange={handleUsernameChange}
-                            placeholder="Enter username (optional)"
-                            className={getUsernameInputClassName()}
-                          />
-                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                            {getUsernameStatusIcon()}
-                          </div>
-                        </div>
-                        {/* Username validation feedback */}
-                        {usernameValidation.username && (
-                          <div className="mt-1">
-                            {usernameValidation.getValidationStatus().status === 'available' && (
-                              <p className="text-green-600 text-xs">{usernameValidation.message}</p>
-                            )}
-                            {(usernameValidation.getValidationStatus().status === 'unavailable' || 
-                              usernameValidation.getValidationStatus().status === 'error') && (
-                              <p className="text-red-600 text-xs">{usernameValidation.message}</p>
-                            )}
-                            {usernameValidation.getValidationStatus().status === 'checking' && (
-                              <p className="text-yellow-600 text-xs">{usernameValidation.message}</p>
-                            )}
-                          </div>
-                        )}
+                        <Input
+                          value={editForm.username}
+                          onChange={handleUsernameChange}
+                          placeholder="Enter username (optional)"
+                          className={validationErrors.username ? 'border-red-500' : ''}
+                        />
                         {validationErrors.username && (
                           <div className="flex items-center mt-1 text-sm text-red-500">
                             <AlertCircle className="h-3 w-3 mr-1" />
@@ -617,17 +550,6 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-
-          {/* <div className="flex space-x-6">
-            <div className="flex items-center space-x-1">
-              <span className="font-semibold">{profile?.followersCount.toLocaleString()}</span>
-              <span className="text-muted-foreground">followers</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="font-semibold">{profile?.followingCount.toLocaleString()}</span>
-              <span className="text-muted-foreground">following</span>
-            </div>
-          </div> */}
 
           {/* Wallet Address */}
           <div className="flex items-center space-x-2 p-3 bg-muted rounded-lg">
@@ -859,7 +781,6 @@ export default function ProfilePage() {
               <Card>
                 <CardContent className="p-8 text-center">
                   <Users className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-muted-foreground">no followers yet</p>
                   <p className="text-xs text-muted-foreground mt-2">when people follow you, they&apos;ll appear here</p>
                 </CardContent>
               </Card>
