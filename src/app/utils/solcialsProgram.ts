@@ -335,6 +335,13 @@ export class SolcialsCustomProgramService {
     // Ensure user profile exists
     await this.ensureUserProfile(wallet);
 
+    console.log('🔧 Preparing createTextPost instruction with accounts:');
+    console.log('  📄 Post PDA:', postPDA.toString());
+    console.log('  👤 User Profile PDA:', userProfilePDA.toString());
+    console.log('  💰 Platform Treasury:', this.platformTreasury.toString());
+    console.log('  📝 Author (wallet):', wallet.publicKey.toString());
+    console.log('  🔧 System Program:', SystemProgram.programId.toString());
+
     // Create instruction data
     const instructionData = Buffer.alloc(8 + 4 + Buffer.byteLength(content, 'utf8') + 8 + (replyTo ? 1 + 32 : 1));
     let offset = 0;
@@ -366,10 +373,11 @@ export class SolcialsCustomProgramService {
 
     const instruction = new TransactionInstruction({
       keys: [
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author (must be signer)
-        { pubkey: postPDA, isSigner: false, isWritable: true },
-        { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: postPDA, isSigner: false, isWritable: true },        // post
+        { pubkey: userProfilePDA, isSigner: false, isWritable: true }, // user_profile
+        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
       programId: this.programId,
       data: instructionData,
@@ -453,10 +461,11 @@ export class SolcialsCustomProgramService {
 
     const instruction = new TransactionInstruction({
       keys: [
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author (must be signer)
-        { pubkey: postPDA, isSigner: false, isWritable: true },
-        { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: postPDA, isSigner: false, isWritable: true },        // post
+        { pubkey: userProfilePDA, isSigner: false, isWritable: true }, // user_profile
+        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
       programId: this.programId,
       data: instructionData,
@@ -565,11 +574,39 @@ export class SolcialsCustomProgramService {
     if (!wallet.publicKey) return;
 
     const [userProfilePDA] = this.getUserProfilePDA(wallet.publicKey);
+    console.log('🔍 Checking user profile at PDA:', userProfilePDA.toString());
+    
     const existingProfile = await this.connection.getAccountInfo(userProfilePDA);
     
     if (!existingProfile) {
-      console.log('🔧 Creating user profile...');
+      console.log('❌ No profile found, creating new profile...');
       await this.initializeUserProfile(wallet);
+    } else {
+      console.log('✅ Profile already exists at PDA:', userProfilePDA.toString());
+      console.log('📊 Profile account size:', existingProfile.data.length, 'bytes');
+      console.log('👤 Profile account owner:', existingProfile.owner.toString());
+      
+      // Verify this is actually our program's account
+      if (!existingProfile.owner.equals(this.programId)) {
+        console.error('❌ Profile account has wrong owner! Expected:', this.programId.toString(), 'Got:', existingProfile.owner.toString());
+        throw new Error(`Profile account has wrong owner. Expected ${this.programId.toString()} but got ${existingProfile.owner.toString()}`);
+      }
+      
+      // Try to parse and verify the profile data
+      try {
+        const profile = await this.getUserProfile(wallet.publicKey);
+        if (profile) {
+          console.log('✅ Successfully parsed profile:', {
+            username: profile.username,
+            displayName: profile.displayName,
+            postCount: profile.postCount
+          });
+        } else {
+          console.warn('⚠️ Profile account exists but couldn\'t parse data');
+        }
+      } catch (parseError) {
+        console.warn('⚠️ Profile exists but parsing failed:', parseError);
+      }
     }
   }
 
@@ -1461,8 +1498,9 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPda, isSigner: false, isWritable: true },
         { pubkey: userProfilePda, isSigner: false, isWritable: true },
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
       data: this.encodeCreateImagePostInstruction(content, timestamp, replyToPublicKey),
     });
@@ -2086,8 +2124,9 @@ export class SolcialsCustomProgramService {
       keys: [
         { pubkey: postPDA, isSigner: false, isWritable: true },
         { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: this.platformTreasury, isSigner: false, isWritable: true }, // platform_treasury
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // author
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program
       ],
       programId: this.programId,
       data: instructionData,
