@@ -335,6 +335,26 @@ export class SolcialsCustomProgramService {
     // Ensure user profile exists
     await this.ensureUserProfile(wallet);
 
+    // Check wallet balance before proceeding
+    const walletBalance = await this.connection.getBalance(wallet.publicKey);
+    const ACCOUNT_SIZE = 8 + 32 + 4 + 280 + 1 + 4 + 1 + 32 + 8 + 8 + 8 + 8 + 1; // 395 bytes
+    const rentExemption = await this.connection.getMinimumBalanceForRentExemption(ACCOUNT_SIZE);
+    const platformFee = 36400; // 1% fee for text posts
+    const estimatedTxFee = 10000; // Conservative estimate for transaction fee
+    const totalNeeded = rentExemption + platformFee + estimatedTxFee;
+
+    console.log('💰 Wallet balance check:');
+    console.log('  Current balance:', walletBalance, 'lamports (', (walletBalance / 1000000000).toFixed(6), 'SOL)');
+    console.log('  Rent exemption needed:', rentExemption, 'lamports');
+    console.log('  Platform fee:', platformFee, 'lamports');  
+    console.log('  Estimated tx fee:', estimatedTxFee, 'lamports');
+    console.log('  Total needed:', totalNeeded, 'lamports (', (totalNeeded / 1000000000).toFixed(6), 'SOL)');
+    console.log('  Remaining after tx:', (walletBalance - totalNeeded), 'lamports');
+
+    if (walletBalance < totalNeeded) {
+      throw new Error(`Insufficient wallet balance. You need ${(totalNeeded / 1000000000).toFixed(6)} SOL but only have ${(walletBalance / 1000000000).toFixed(6)} SOL`);
+    }
+
     console.log('🔧 Preparing createTextPost instruction with accounts:');
     console.log('  📄 Post PDA:', postPDA.toString());
     console.log('  👤 User Profile PDA:', userProfilePDA.toString());
