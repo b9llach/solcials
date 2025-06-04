@@ -685,7 +685,7 @@ export class SolcialsCustomProgramService {
           const post: SocialPost = {
             id: account.pubkey.toString(),
             author,
-            content,
+            content, // Keep original content with metadata for NFT resolution
             timestamp: timestampMs,
             signature: account.pubkey.toString(),
             likes,
@@ -1533,7 +1533,7 @@ export class SolcialsCustomProgramService {
               const reply: SocialPost = {
                 id: account.pubkey.toString(),
                 author,
-                content,
+                content, // Keep original content for NFT metadata access
                 timestamp: Number(timestamp) * 1000,
                 signature: account.pubkey.toString(),
                 replyTo,
@@ -2122,5 +2122,17 @@ export class SolcialsCustomProgramService {
 
     console.log('✅ cNFT linked to post:', signature);
     return signature;
+  }
+
+  // Utility function to clean metadata from post content for display
+  private cleanContentForDisplay(content: string): string {
+    // Remove the metadata CID reference from display content
+    return content.replace(/\n?__META:[a-zA-Z0-9]+__/g, '').trim();
+  }
+
+  // Extract metadata CID from post content if present
+  private extractMetadataCidFromContent(content: string): string | null {
+    const metaMatch = content.match(/__META:([a-zA-Z0-9]+)__/);
+    return metaMatch ? metaMatch[1] : null;
   }
 } 

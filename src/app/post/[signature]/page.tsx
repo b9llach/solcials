@@ -16,6 +16,12 @@ import { PublicKey } from '@solana/web3.js';
 import NFTImage from '../../components/NFTImage';
 import { Toast } from '../../utils/toast';
 
+// Utility function to clean metadata from post content for display
+const cleanContentForDisplay = (content: string): string => {
+  // Remove the metadata CID reference from display content
+  return content.replace(/\n?__META:[a-zA-Z0-9]+__/g, '').trim();
+};
+
 export default function PostDetailPage() {
   const params = useParams();
   const signature = params.signature as string;
@@ -442,7 +448,7 @@ export default function PostDetailPage() {
             {postContent && (
               <div className="mb-3 sm:mb-4">
                 <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-                  {postContent}
+                  {cleanContentForDisplay(postContent)}
                 </p>
               </div>
             )}
@@ -600,7 +606,7 @@ export default function PostDetailPage() {
                       {/* Reply Content */}
                       <div className="mb-3 sm:mb-4">
                         <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-                          {reply.content}
+                          {cleanContentForDisplay(reply.content)}
                         </p>
                       </div>
                       

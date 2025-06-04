@@ -23,6 +23,12 @@ interface PostListProps {
   feedType?: 'all' | 'following'; // Feed type for filtering
 }
 
+// Utility function to clean metadata from post content for display
+const cleanContentForDisplay = (content: string): string => {
+  // Remove the metadata CID reference from display content
+  return content.replace(/\n?__META:[a-zA-Z0-9]+__/g, '').trim();
+};
+
 export default function PostList({ refreshTrigger, userFilter, feedType = 'all' }: PostListProps) {
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -672,7 +678,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all' 
                   {postContent && (
                     <div className="mb-3 sm:mb-4">
                       <p className="text-foreground whitespace-pre-wrap leading-relaxed text-sm sm:text-base">
-                        {postContent}
+                        {cleanContentForDisplay(postContent)}
                       </p>
                     </div>
                   )}
