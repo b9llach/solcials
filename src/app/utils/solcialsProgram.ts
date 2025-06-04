@@ -91,6 +91,19 @@ export class SolcialsCustomProgramService {
     
     // Validate connection on startup
     this.validateConnection();
+    
+    // Validate we're using the correct program ID for mainnet
+    console.log('🎯 Program ID validation:');
+    console.log('  Using Program ID:', this.programId.toString());
+    console.log('  Expected Mainnet ID: GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi');
+    console.log('  Is correct mainnet program?', this.programId.toString() === 'GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi');
+    
+    if (this.programId.toString() !== 'GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi') {
+      console.warn('⚠️ WARNING: Not using the correct mainnet program ID! This might cause wallet security warnings.');
+      console.warn('⚠️ Expected: GvGuZyGRnCQ4LFRxTXJfbhxoPH1d524U6DvQfM5nqSNi');
+      console.warn('⚠️ Current:  ', this.programId.toString());
+      console.warn('⚠️ Set NEXT_PUBLIC_SOLCIALS_PROGRAM_ID in your .env.local file');
+    }
   }
 
   // Validate that the RPC connection is working properly
@@ -459,6 +472,31 @@ export class SolcialsCustomProgramService {
 
     // Ensure user profile exists
     await this.ensureUserProfile(wallet);
+
+    // Check wallet balance (only need to cover rent exemption now - no platform fees!)
+    const walletBalance = await this.connection.getBalance(wallet.publicKey);
+    const ACCOUNT_SIZE = 8 + 32 + 4 + 280 + 1 + 4 + 1 + 32 + 8 + 8 + 8 + 8 + 1; // 395 bytes - same as text post
+    const rentExemption = await this.connection.getMinimumBalanceForRentExemption(ACCOUNT_SIZE);
+    const estimatedTxFee = 10000; // Conservative estimate for transaction fee
+    const totalNeeded = rentExemption + estimatedTxFee; // No platform fees!
+
+    console.log('💰 Wallet balance check for image post (FREE!):');
+    console.log('  Current balance:', walletBalance, 'lamports (', (walletBalance / 1000000000).toFixed(6), 'SOL)');
+    console.log('  Rent exemption needed:', rentExemption, 'lamports');
+    console.log('  Estimated tx fee:', estimatedTxFee, 'lamports');
+    console.log('  Total needed:', totalNeeded, 'lamports (', (totalNeeded / 1000000000).toFixed(6), 'SOL)');
+    console.log('  Remaining after tx:', (walletBalance - totalNeeded), 'lamports');
+
+    if (walletBalance < totalNeeded) {
+      throw new Error(`Insufficient wallet balance. You need ${(totalNeeded / 1000000000).toFixed(6)} SOL but only have ${(walletBalance / 1000000000).toFixed(6)} SOL`);
+    }
+
+    console.log('🔧 Preparing createImagePost instruction with accounts:');
+    console.log('  📄 Post PDA:', postPDA.toString());
+    console.log('  👤 User Profile PDA:', userProfilePDA.toString());
+    console.log('  📝 Author (wallet):', wallet.publicKey.toString());
+    console.log('  🔧 System Program:', SystemProgram.programId.toString());
+    console.log('  🎯 Program ID:', this.programId.toString());
 
     // Create instruction data (similar to text post)
     const instructionData = Buffer.alloc(8 + 4 + Buffer.byteLength(content, 'utf8') + 8 + (replyTo ? 1 + 32 : 1));
