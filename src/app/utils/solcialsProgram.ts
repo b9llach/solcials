@@ -2283,7 +2283,7 @@ export class SolcialsCustomProgramService {
   // Check if username is available (case-insensitive)
   async isUsernameAvailable(username: string, excludeUser?: PublicKey): Promise<{ available: boolean; message: string }> {
     if (!username || username.trim() === '') {
-      return { available: false, message: 'Username cannot be empty' };
+      return { available: false, message: 'no username provided' };
     }
 
     // Normalize username for comparison (lowercase, trimmed)
@@ -2291,22 +2291,22 @@ export class SolcialsCustomProgramService {
 
     // Basic validation
     if (normalizedUsername.length < 3) {
-      return { available: false, message: 'Username must be at least 3 characters long' };
+      return { available: false, message: 'username must be at least 3 characters long' };
     }
 
     if (normalizedUsername.length > 50) {
-      return { available: false, message: 'Username cannot be longer than 50 characters' };
+      return { available: false, message: 'username cannot be longer than 50 characters' };
     }
 
     // Check for invalid characters (only alphanumeric and underscore)
     if (!/^[a-zA-Z0-9_]+$/.test(normalizedUsername)) {
-      return { available: false, message: 'Username can only contain letters, numbers, and underscores' };
+      return { available: false, message: 'username can only contain letters, numbers, and underscores' };
     }
 
     // Reserved usernames
     const reserved = ['admin', 'root', 'user', 'null', 'undefined', 'solcials', 'solana', 'about', 'help', 'support', 'api', 'www', 'mail', 'ftp', 'localhost', 'test'];
     if (reserved.includes(normalizedUsername)) {
-      return { available: false, message: 'This username is reserved' };
+      return { available: false, message: 'this username is reserved' };
     }
 
     try {
@@ -2328,14 +2328,14 @@ export class SolcialsCustomProgramService {
       if (existingUser) {
         return { 
           available: false, 
-          message: `Username "${username}" is already taken by ${existingUser.pubkey.toString().slice(0, 8)}...` 
+          message: `username "${username}" is already taken by ${existingUser.pubkey.toString().slice(0, 8)}...` 
         };
       }
 
-      return { available: true, message: `Username "${username}" is available!` };
+      return { available: true, message: `username "${username}" is available!` };
     } catch (error) {
       console.error('Error checking username availability:', error);
-      return { available: false, message: 'Unable to check username availability. Please try again.' };
+      return { available: false, message: 'unable to check username availability. please try again.' };
     }
   }
 } 

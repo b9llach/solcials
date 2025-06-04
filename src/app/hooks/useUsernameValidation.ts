@@ -23,7 +23,7 @@ export function useUsernameValidation(initialUsername: string = '') {
   // Manual username checking (only called when needed)
   const checkUsername = useCallback(async (username: string): Promise<{ available: boolean; message: string }> => {
     if (!username || username.trim() === '') {
-      return { available: true, message: 'No username provided' };
+      return { available: true, message: 'no username provided' };
     }
 
     setState(prev => ({
@@ -48,8 +48,8 @@ export function useUsernameValidation(initialUsername: string = '') {
 
       return result;
     } catch (error) {
-      console.error('Username validation error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to check username availability';
+      console.error('username validation error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'failed to check username availability';
       
       setState(prev => ({
         ...prev,
@@ -76,12 +76,12 @@ export function useUsernameValidation(initialUsername: string = '') {
   const getBasicValidation = useCallback((username: string) => {
     if (!username) return { isValid: true, message: '' };
     
-    if (username.length < 3) return { isValid: false, message: 'Username must be at least 3 characters' };
-    if (username.length > 50) return { isValid: false, message: 'Username cannot be longer than 50 characters' };
-    if (!/^[a-zA-Z0-9_]+$/.test(username)) return { isValid: false, message: 'Username can only contain letters, numbers, and underscores' };
+    if (username.length < 3) return { isValid: false, message: 'username must be at least 3 characters' };
+    if (username.length > 50) return { isValid: false, message: 'username cannot be longer than 50 characters' };
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) return { isValid: false, message: 'username can only contain letters, numbers, and underscores' };
     
     const reserved = ['admin', 'root', 'user', 'null', 'undefined', 'solcials', 'solana', 'about', 'help', 'support', 'api', 'www', 'mail', 'ftp', 'localhost', 'test'];
-    if (reserved.includes(username.toLowerCase())) return { isValid: false, message: 'This username is reserved' };
+    if (reserved.includes(username.toLowerCase())) return { isValid: false, message: 'username is reserved' };
     
     return { isValid: true, message: '' };
   }, []);
