@@ -278,9 +278,9 @@ export class SolcialsCustomProgramService {
 
     const instruction = new TransactionInstruction({
       keys: [
-        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // user (must be signer) first
-        { pubkey: userProfilePDA, isSigner: false, isWritable: true },
-        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: userProfilePDA, isSigner: false, isWritable: true }, // user_profile (first)
+        { pubkey: wallet.publicKey, isSigner: true, isWritable: true }, // user (signer, second)
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false }, // system_program (third)
       ],
       programId: this.programId,
       data: INSTRUCTION_DISCRIMINATORS.initializeUserProfile,
