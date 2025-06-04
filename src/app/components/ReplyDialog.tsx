@@ -1,21 +1,19 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
-import { PublicKey } from '@solana/web3.js';
 import { SolcialsCustomProgramService } from '../utils/solcialsProgram';
 import { SocialPost } from '../types/social';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { MessageCircle, Send, Loader2, X, Upload, Image as ImageIcon } from 'lucide-react';
-import Image from 'next/image';
-import { getSimplifiedNFTService } from '../utils/simplifiedNftService';
-import { getImageDimensions, formatFileSize } from '../utils/imageUtils';
-import { Toast } from '../utils/toast';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Send, Loader2, X, ImageIcon } from 'lucide-react';
+import { PublicKey } from '@solana/web3.js';
+import { getSimplifiedNFTService } from '../utils/simplifiedNftService';
+import { Toast } from '../utils/toast';
 
 interface ReplyDialogProps {
   post: SocialPost;
@@ -33,7 +31,6 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [userProfiles, setUserProfiles] = useState<Map<string, { username?: string, displayName?: string }>>(new Map());
-  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   
   const { connection } = useConnection();
@@ -108,14 +105,6 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
     reader.onload = async (e) => {
       const preview = e.target?.result as string;
       setImagePreview(preview);
-      
-      try {
-        const dimensions = await getImageDimensions(file);
-        setImageDimensions(dimensions);
-      } catch (error) {
-        console.warn('Could not get image dimensions:', error);
-        setImageDimensions(null);
-      }
     };
     reader.readAsDataURL(file);
   };
@@ -123,7 +112,6 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
   const removeImage = () => {
     setSelectedImage(null);
     setImagePreview(null);
-    setImageDimensions(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -173,6 +161,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
             wallet, 
             content.trim(), 
             nftAddress,
+            undefined, // No metadata CID for replies (they use NFT but don't need public metadata sharing)
             new PublicKey(post.id)
           );
           
@@ -387,7 +376,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
           size="sm"
           className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2 sm:px-3"
         >
-          <MessageCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+          <ImageIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
           <span className="text-xs hidden sm:inline">Reply</span>
         </Button>
       </DialogTrigger>
