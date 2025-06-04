@@ -508,7 +508,7 @@ export default function ProfilePage() {
             )}
           </div>
 
-          <div className="flex space-x-6">
+          {/* <div className="flex space-x-6">
             <div className="flex items-center space-x-1">
               <span className="font-semibold">{profile?.followersCount.toLocaleString()}</span>
               <span className="text-muted-foreground">followers</span>
@@ -517,7 +517,7 @@ export default function ProfilePage() {
               <span className="font-semibold">{profile?.followingCount.toLocaleString()}</span>
               <span className="text-muted-foreground">following</span>
             </div>
-          </div>
+          </div> */}
 
           {/* Wallet Address */}
           <div className="flex items-center space-x-2 p-3 bg-muted rounded-lg">
