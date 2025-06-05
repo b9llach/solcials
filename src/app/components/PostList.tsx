@@ -16,6 +16,7 @@ import ThreadContext from './ThreadContext';
 import NFTImage from './NFTImage';
 import { ExternalLink, UserPlus, Clock, MessageSquare, Loader2, Users, Copy, Check } from 'lucide-react';
 import { Toast } from '../utils/toast';
+import TwitterShareButton from './TwitterShareButton';
 
 interface PostListProps {
   refreshTrigger: number;
@@ -769,6 +770,16 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
                         <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                         <span className="text-xs hidden sm:inline">Share</span>
                       </Button>
+
+                      <TwitterShareButton
+                        url={`${window.location.origin}/post/${post.signature}`}
+                        text={`Check out this post by ${getUserDisplayName(post.author)} on @solcials: "${cleanContentForDisplay(post.content).substring(0, 100)}${cleanContentForDisplay(post.content).length > 100 ? '...' : ''}"`}
+                        hashtags={['solcials', 'solana', 'blockchain', 'web3']}
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2 sm:px-3"
+                        showText={false}
+                      />
                       
                       <Button
                         variant="ghost"

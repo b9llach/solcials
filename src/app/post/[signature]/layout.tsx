@@ -74,10 +74,10 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
       },
       twitter: {
         card: post.imageUrl ? 'summary_large_image' : 'summary',
-        title,
-        description,
-        creator: authorUsername || 'unknown creator',
-        site: 'solcials',
+        title: title.length > 70 ? `${title.substring(0, 67)}...` : title,
+        description: description.length > 200 ? `${description.substring(0, 197)}...` : description,
+        creator: authorUsername || '@solcials',
+        site: '@solcials',
         ...(post.imageUrl && {
           images: [post.imageUrl],
         }),
@@ -87,6 +87,11 @@ export async function generateMetadata({ params }: { params: Promise<{ signature
         'discord:title': title,
         'discord:description': description,
         'theme-color': '#ffffff', // white color for brand
+        // Twitter-specific meta tags for better embedding
+        'twitter:app:name:iphone': 'solcials',
+        'twitter:app:name:ipad': 'solcials',
+        'twitter:app:name:googleplay': 'solcials',
+        'twitter:url': postUrl,
       },
     };
   } catch (error) {

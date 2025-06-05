@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { PublicKey } from '@solana/web3.js';
 import NFTImage from '../../components/NFTImage';
 import { Toast } from '../../utils/toast';
+import TwitterShareButton from '../../components/TwitterShareButton';
 
 // Utility function to clean metadata from post content for display
 const cleanContentForDisplay = (content: string): string => {
@@ -490,6 +491,16 @@ export default function PostDetailPage() {
                   <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                   <span className="text-xs hidden sm:inline">Share</span>
                 </Button>
+
+                <TwitterShareButton
+                  url={`${window.location.origin}/post/${post.signature}`}
+                  text={`check out this post by ${getUserDisplayName(post.author)} on solcials: "${cleanContentForDisplay(post.content).substring(0, 100)}${cleanContentForDisplay(post.content).length > 100 ? '...' : ''}"`}
+                  hashtags={['solcials', 'solana', 'blockchain', 'web3']}
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 px-2 sm:px-3"
+                  showText={false}
+                />
                 
                 <Button
                   variant="ghost"
@@ -631,6 +642,16 @@ export default function PostDetailPage() {
                             <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                             <span className="text-xs hidden sm:inline">Share</span>
                           </Button>
+
+                          <TwitterShareButton
+                            url={`${window.location.origin}/post/${post.signature}`}
+                            text={`check out this reply by ${getUserDisplayName(reply.author)} on solcials: "${cleanContentForDisplay(reply.content).substring(0, 100)}${cleanContentForDisplay(reply.content).length > 100 ? '...' : ''}"`}
+                            hashtags={['solcials', 'solana', 'blockchain', 'web3']}
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 px-2 sm:px-3"
+                            showText={false}
+                          />
                           
                           <Button
                             variant="ghost"
