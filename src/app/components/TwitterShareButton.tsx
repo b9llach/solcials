@@ -45,8 +45,8 @@ export const generateTwitterShareText = (
 export default function TwitterShareButton({
   url,
   text,
-  via = 'solcials',
-  hashtags = ['solana', 'blockchain', 'web3'],
+  via = 'solcialsonsol',
+  hashtags = ['solcialsonsol', 'solana'],
   size = 'sm',
   variant = 'ghost',
   className = '',
@@ -59,7 +59,7 @@ export default function TwitterShareButton({
     
     // Add parameters
     twitterUrl.searchParams.set('text', text);
-    twitterUrl.searchParams.set('url', url);
+    twitterUrl.searchParams.set('url', url);    
     
     if (via) {
       twitterUrl.searchParams.set('via', via);
