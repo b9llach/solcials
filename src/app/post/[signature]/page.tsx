@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { PublicKey } from '@solana/web3.js';
 import NFTImage from '../../components/NFTImage';
 import { Toast } from '../../utils/toast';
-import TwitterShareButton from '../../components/TwitterShareButton';
+import TwitterShareButton, { generateTwitterShareText } from '../../components/TwitterShareButton';
 
 // Utility function to clean metadata from post content for display
 const cleanContentForDisplay = (content: string): string => {
@@ -34,6 +34,7 @@ export default function PostDetailPage() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const [currentSharedPost, setCurrentSharedPost] = useState<SocialPost | null>(null);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   const [replies, setReplies] = useState<SocialPost[]>([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
@@ -258,6 +259,7 @@ export default function PostDetailPage() {
     if (!post) return;
     const postUrl = `${window.location.origin}/post/${post.signature}`;
     setShareUrl(postUrl);
+    setCurrentSharedPost(post);
     setShareDialogOpen(true);
     setCopied(false);
   };
@@ -494,7 +496,11 @@ export default function PostDetailPage() {
 
                 <TwitterShareButton
                   url={`${window.location.origin}/post/${post.signature}`}
-                  text={`check out this post by ${getUserDisplayName(post.author)} on solcials: "${cleanContentForDisplay(post.content).substring(0, 100)}${cleanContentForDisplay(post.content).length > 100 ? '...' : ''}"`}
+                  text={generateTwitterShareText(
+                    getUserDisplayName(post.author),
+                    post.content,
+                    !!post.imageUrl
+                  )}
                   hashtags={['solcials', 'solana', 'blockchain', 'web3']}
                   size="sm"
                   variant="ghost"
@@ -643,15 +649,6 @@ export default function PostDetailPage() {
                             <span className="text-xs hidden sm:inline">Share</span>
                           </Button>
 
-                          <TwitterShareButton
-                            url={`${window.location.origin}/post/${post.signature}`}
-                            text={`check out this reply by ${getUserDisplayName(reply.author)} on solcials: "${cleanContentForDisplay(reply.content).substring(0, 100)}${cleanContentForDisplay(reply.content).length > 100 ? '...' : ''}"`}
-                            hashtags={['solcials', 'solana', 'blockchain', 'web3']}
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 px-2 sm:px-3"
-                            showText={false}
-                          />
                           
                           <Button
                             variant="ghost"
@@ -742,6 +739,28 @@ export default function PostDetailPage() {
                   </>
                 )}
               </Button>
+            </div>
+            
+            {/* Divider */}
+            <div className="border-t border-border/50 pt-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                Or share on social media:
+              </p>
+              {post && (
+                <TwitterShareButton
+                  url={shareUrl}
+                  text={generateTwitterShareText(
+                    getUserDisplayName(post.author),
+                    post.content,
+                    !!post.imageUrl
+                  )}
+                  hashtags={['solcials', 'solana', 'blockchain', 'web3']}
+                  size="default"
+                  variant="outline"
+                  className="w-full"
+                  showText={true}
+                />
+              )}
             </div>
           </div>
         </DialogContent>

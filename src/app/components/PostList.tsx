@@ -16,7 +16,7 @@ import ThreadContext from './ThreadContext';
 import NFTImage from './NFTImage';
 import { ExternalLink, UserPlus, Clock, MessageSquare, Loader2, Users, Copy, Check } from 'lucide-react';
 import { Toast } from '../utils/toast';
-import TwitterShareButton from './TwitterShareButton';
+import TwitterShareButton, { generateTwitterShareText } from './TwitterShareButton';
 
 interface PostListProps {
   refreshTrigger: number;
@@ -42,6 +42,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const [currentSharedPost, setCurrentSharedPost] = useState<SocialPost | null>(null);
   const [likedPosts, setLikedPosts] = useState<Set<string>>(new Set());
   
   // Replies functionality
@@ -568,6 +569,7 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
             const handleShare = async () => {
               const postUrl = `${window.location.origin}/post/${post.signature}`;
               setShareUrl(postUrl);
+              setCurrentSharedPost(post);
               setShareDialogOpen(true);
               setCopied(false);
             };
@@ -770,16 +772,6 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
                         <ExternalLink className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
                         <span className="text-xs hidden sm:inline">Share</span>
                       </Button>
-
-                      <TwitterShareButton
-                        url={`${window.location.origin}/post/${post.signature}`}
-                        text={`Check out this post by ${getUserDisplayName(post.author)} on @solcials: "${cleanContentForDisplay(post.content).substring(0, 100)}${cleanContentForDisplay(post.content).length > 100 ? '...' : ''}"`}
-                        hashtags={['solcials', 'solana', 'blockchain', 'web3']}
-                        size="sm"
-                        variant="ghost"
-                        className="h-8 px-2 sm:px-3"
-                        showText={false}
-                      />
                       
                       <Button
                         variant="ghost"
@@ -954,6 +946,28 @@ export default function PostList({ refreshTrigger, userFilter, feedType = 'all',
                   </>
                 )}
               </Button>
+            </div>
+            
+            {/* Divider */}
+            <div className="border-t border-border/50 pt-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                Or share on social media:
+              </p>
+              {currentSharedPost && (
+                <TwitterShareButton
+                  url={shareUrl}
+                  text={generateTwitterShareText(
+                    getUserDisplayName(currentSharedPost.author),
+                    currentSharedPost.content,
+                    !!currentSharedPost.imageUrl
+                  )}
+                  hashtags={['solcials', 'solana', 'blockchain', 'web3']}
+                  size="default"
+                  variant="outline"
+                  className="w-full"
+                  showText={true}
+                />
+              )}
             </div>
           </div>
         </DialogContent>

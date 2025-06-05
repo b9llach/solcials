@@ -13,6 +13,34 @@ interface TwitterShareButtonProps {
   className?: string;
   showText?: boolean;
 }
+ 
+// Utility function to generate better Twitter share text
+export const generateTwitterShareText = (
+  authorName: string,
+  content: string,
+  isImagePost: boolean = false
+): string => {
+  // Clean and prepare content
+  const cleanedContent = content.replace(/\n?__META:[a-zA-Z0-9]+__/g, '').trim();
+  
+  // Handle different post types
+  if (!cleanedContent || cleanedContent.length === 0) {
+    // Image-only or empty post
+    if (isImagePost) {
+      return `check out this image post by ${authorName} on @solcials`;
+    } else {
+      return `check out this post by ${authorName} on @solcials`;
+    }
+  }
+  
+  // Post with content
+  const maxContentLength = 40;
+  const truncatedContent = cleanedContent.length > maxContentLength 
+    ? `${cleanedContent.substring(0, maxContentLength)}...`
+    : cleanedContent;
+  
+  return `check out this post by ${authorName} on @solcials: "${truncatedContent}"`;
+};
 
 export default function TwitterShareButton({
   url,
@@ -41,11 +69,11 @@ export default function TwitterShareButton({
       twitterUrl.searchParams.set('hashtags', hashtags.join(','));
     }
 
-    // Open in new window
+    // Open in new tab
     window.open(
       twitterUrl.toString(),
-      'twitter-share',
-      'width=550,height=420,scrollbars=yes,resizable=yes'
+      '_blank',
+      'noopener,noreferrer'
     );
   };
 
