@@ -27,9 +27,9 @@ export const generateTwitterShareText = (
   if (!cleanedContent || cleanedContent.length === 0) {
     // Image-only or empty post
     if (isImagePost) {
-      return `check out this image post by ${authorName} on @solcials`;
+      return `check out this image post by ${authorName} on @solcialsonsol`;
     } else {
-      return `check out this post by ${authorName} on @solcials`;
+      return `check out this post by ${authorName} on @solcialsonsol`;
     }
   }
   
@@ -39,7 +39,7 @@ export const generateTwitterShareText = (
     ? `${cleanedContent.substring(0, maxContentLength)}...`
     : cleanedContent;
   
-  return `check out this post by ${authorName} on @solcials: "${truncatedContent}"`;
+  return `check out this post by ${authorName} on @solcialsonsol: "${truncatedContent}"`;
 };
 
 export default function TwitterShareButton({
