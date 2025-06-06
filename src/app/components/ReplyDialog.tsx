@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Send, Loader2, X, ImageIcon } from 'lucide-react';
+import { Send, Loader2, X, ImageIcon, MessageSquare } from 'lucide-react';
 import { PublicKey } from '@solana/web3.js';
 import { getSimplifiedNFTService } from '../utils/simplifiedNftService';
 import { Toast } from '../utils/toast';
@@ -373,7 +373,7 @@ export default function ReplyDialog({ post, onReplyCreated, open, onOpenChange, 
           size="sm"
           className="text-muted-foreground hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20 transition-all h-8 px-2 sm:px-3"
         >
-          <ImageIcon className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+          <MessageSquare className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
           <span className="text-xs hidden sm:inline">Reply</span>
         </Button>
       </DialogTrigger>
